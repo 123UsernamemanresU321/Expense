@@ -1,0 +1,35 @@
+name: Nightly Edge Function Cron
+
+on:
+  schedule:
+    # 02:00 UTC daily
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+jobs:
+  cron:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Aggregate monthly summaries
+        run: |
+          curl -sS -X POST \
+            "${{ secrets.SUPABASE_EDGE_BASE_URL }}/aggregate-monthly-summaries" \
+            -H "Content-Type: application/json" \
+            -H "x-cron-secret: ${{ secrets.SUPABASE_CRON_SECRET }}" \
+            -d '{"mode":"cron","month":"'"$(date -u +%Y-%m)"'","backfill_months":1}'
+
+      - name: Generate insights
+        run: |
+          curl -sS -X POST \
+            "${{ secrets.SUPABASE_EDGE_BASE_URL }}/generate-insights" \
+            -H "Content-Type: application/json" \
+            -H "x-cron-secret: ${{ secrets.SUPABASE_CRON_SECRET }}" \
+            -d '{"mode":"cron","month":"'"$(date -u +%Y-%m)"'"}'
+
+      - name: Generate subscription instances
+        run: |
+          curl -sS -X POST \
+            "${{ secrets.SUPABASE_EDGE_BASE_URL }}/generate-subscription-instances" \
+            -H "Content-Type: application/json" \
+            -H "x-cron-secret: ${{ secrets.SUPABASE_CRON_SECRET }}" \
+            -d '{"mode":"cron","horizon_days":45}'

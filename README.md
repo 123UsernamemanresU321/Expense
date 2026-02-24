@@ -1,16 +1,18 @@
-# 💰 Personal Finance Dashboard
+# 💰 FinanceHub — Personal Finance Dashboard
 
 A production-grade, multi-page personal finance dashboard built with Next.js (static export) + Supabase.
 
 ## Tech Stack
 
 | Layer | Technology |
-|-------|-----------|
-| Frontend | Next.js 14 (App Router, Static Export) |
-| UI | TailwindCSS + shadcn/ui |
+|-------|-----------| 
+| Frontend | Next.js 16 (App Router, Static Export) |
+| Styling | TailwindCSS v4 |
 | Database | Supabase (PostgreSQL + RLS) |
 | Auth | Supabase Auth |
+| Edge Functions | Supabase Deno Runtime |
 | Hosting | GitHub Pages (static) |
+| CI/CD | GitHub Actions |
 
 ## Quick Start
 
@@ -26,7 +28,7 @@ npm install
 cp .env.example .env.local
 ```
 
-Edit `.env.local` with your Supabase credentials (see [Supabase Manual Setup](./docs/supabase_manual_setup.md)).
+Edit `.env.local` with your Supabase credentials.
 
 ### 3. Set Up Database
 
@@ -39,90 +41,90 @@ supabase/sql/03_triggers.sql        → Triggers (audit, splits, closures)
 supabase/sql/04_rls_policies.sql    → Row Level Security
 supabase/sql/05_seed.sql            → Demo data
 supabase/sql/06_sanity_tests.sql    → Verification queries
+supabase/sql/07_import_jobs_table.sql → Import jobs table
 ```
 
-See [`docs/supabase_manual_setup.md`](./docs/supabase_manual_setup.md) for detailed instructions.
+See [`docs/supabase_manual_setup.md`](./docs/supabase_manual_setup.md) for details.
 
-### 4. Run Development Server
+### 4. Deploy Edge Functions
+
+Copy each function from `supabase/functions/<name>/index.ts` into the Supabase Dashboard Edge Functions editor.
+
+See [`docs/supabase_edge_functions_manual_deploy.md`](./docs/supabase_edge_functions_manual_deploy.md).
+
+### 5. Run Development Server
 
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
-
-### 5. Build for Production (Static Export)
+### 6. Build for Production
 
 ```bash
-npm run build
+npm run build   # outputs static site to out/
+npx serve out   # preview locally
 ```
 
-This produces a static site in the `out/` directory.
+## Deploy to GitHub Pages
 
-### 6. Preview Production Build
+Full guide: [`docs/github_pages_deploy.md`](./docs/github_pages_deploy.md)
 
-```bash
-npx serve out
-```
-
-## GitHub Pages Deployment
-
-This app is configured for static export to GitHub Pages.
-
-### Base Path Configuration
-
-If your repository is at `github.com/username/Expense`, set in `.env.local`:
-
-```
-NEXT_PUBLIC_BASE_PATH=/Expense
-```
-
-For custom domains (no subpath), leave it empty:
-
-```
-NEXT_PUBLIC_BASE_PATH=
-```
-
-### GitHub Actions
-
-The CI/CD workflow (`.github/workflows/deploy.yml`) will be added in Phase 5. For now, you can deploy manually:
-
-```bash
-npm run build
-# Push the `out/` directory to the `gh-pages` branch
-```
+**Quick steps:**
+1. Push to `main`
+2. Set GitHub Pages source → **GitHub Actions**
+3. Add secrets: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_BASE_PATH`
+4. The `pages.yml` workflow builds and deploys automatically
 
 ## Project Structure
 
 ```
-├── app/                        # Next.js App Router pages
-│   ├── auth/
-│   │   ├── login/page.tsx
-│   │   ├── register/page.tsx
-│   │   └── reset/page.tsx
-│   ├── dashboard/page.tsx
-│   ├── transactions/page.tsx
-│   ├── layout.tsx
-│   └── page.tsx
-├── src/
-│   ├── components/             # React components
-│   │   ├── ui/                 # shadcn/ui components
-│   │   ├── layout/             # App shell (sidebar, topbar)
-│   │   └── auth/               # Auth forms
-│   └── lib/
-│       ├── supabase.ts         # Supabase client (browser)
-│       └── database.types.ts   # TypeScript types (matches DB)
-├── supabase/
-│   ├── sql/                    # SQL files (run in Supabase Dashboard)
-│   └── functions/              # Edge functions (Phase 2)
-├── docs/                       # Setup guides
-├── .github/workflows/          # CI/CD (Phase 5)
-└── public/                     # Static assets
+src/
+├── app/                          # Next.js App Router pages
+│   ├── auth/{login,register,reset}/
+│   ├── dashboard/
+│   ├── transactions/ + transactions/new/
+│   ├── categories/
+│   ├── accounts/
+│   ├── budgets/
+│   ├── subscriptions/
+│   ├── analytics/
+│   ├── shared/
+│   ├── settings/
+│   └── layout.tsx
+├── components/
+│   ├── layout/                   # AppShell, Sidebar, Topbar
+│   └── ui/                       # Toast, Modal, Button, Input, etc.
+├── lib/
+│   ├── supabase/client.ts        # Browser Supabase client
+│   ├── supabase/edge-functions.ts
+│   ├── api/                      # 11 domain API modules
+│   ├── auth-context.tsx          # Auth + ledger + role context
+│   └── errors.ts                 # Error model + toast
+├── types/database.ts             # TypeScript types (24 tables)
+supabase/
+├── sql/                          # SQL files (01–07)
+├── functions/                    # 8 Edge Functions
+docs/
+├── supabase_manual_setup.md
+├── supabase_edge_functions_manual_deploy.md
+├── frontend_data_contract.md
+├── github_pages_deploy.md
+└── ui_notes.md
+.github/workflows/
+├── pages.yml                     # Build + deploy to GitHub Pages
+├── ci.yml                        # TypeScript + build checks
+└── cron.yml                      # Nightly edge function calls
 ```
+
+## Security Model
+
+- Frontend uses only the **anon key** + RLS
+- **Service role key** is stored only in Supabase Edge Function secrets
+- **Cron secret** is stored only in GitHub Secrets + Supabase Secrets
+- All mutations with elevated privileges go through Edge Functions
 
 ## Schema Contract
 
 The database schema in `supabase/sql/01-04` is treated as a **contract**:
 - Table/column names are frozen after Phase 1
-- Changes must be via new SQL migration files (e.g., `07_migration_*.sql`)
-- Never edit existing SQL files (01–04)
+- Changes must be via new SQL migration files
