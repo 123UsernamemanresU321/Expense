@@ -17,7 +17,7 @@ export default function RegisterPage() {
         setError(null);
 
         try {
-            const { supabase } = await import("@/lib/supabase");
+            const { supabase } = await import("@/lib/supabase/client");
             const { error } = await supabase.auth.signUp({
                 email,
                 password,

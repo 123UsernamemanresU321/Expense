@@ -15,7 +15,7 @@ export default function ResetPasswordPage() {
         setError(null);
 
         try {
-            const { supabase } = await import("@/lib/supabase");
+            const { supabase } = await import("@/lib/supabase/client");
             const { error } = await supabase.auth.resetPasswordForEmail(email, {
                 redirectTo: `${window.location.origin}/auth/login`,
             });

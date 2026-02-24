@@ -17,7 +17,7 @@ export default function LoginPage() {
         try {
             // Supabase auth will be connected in Phase 2
             // For now, redirect to dashboard
-            const { supabase } = await import("@/lib/supabase");
+            const { supabase } = await import("@/lib/supabase/client");
             const { error } = await supabase.auth.signInWithPassword({
                 email,
                 password,
