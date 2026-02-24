@@ -16,7 +16,7 @@ export async function createLedger(data: {
     currency_code?: string;
 }): Promise<Ledger> {
     const { data: { user } } = await supabase.auth.getUser();
-    return unwrap(
+    const ledger: Ledger = unwrap(
         await supabase.from("ledgers").insert({
             name: data.name,
             description: data.description ?? null,
@@ -24,6 +24,15 @@ export async function createLedger(data: {
             created_by: user!.id,
         }).select().single()
     );
+
+    // Auto-add creator as owner
+    await supabase.from("ledger_members").insert({
+        ledger_id: ledger.id,
+        user_id: user!.id,
+        role: "owner",
+    });
+
+    return ledger;
 }
 
 export async function updateLedger(id: string, updates: Partial<Pick<Ledger, "name" | "description" | "currency_code" | "is_active">>): Promise<Ledger> {
