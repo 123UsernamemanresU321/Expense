@@ -1,123 +1,197 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import { AppShell } from "@/components/layout/app-shell";
-
-const stats = [
-    { label: "Total Balance", value: "$18,800.00", change: "+2.4%", icon: "💰", color: "emerald" },
-    { label: "Monthly Income", value: "$5,300.00", change: "+12.5%", icon: "📈", color: "teal" },
-    { label: "Monthly Expenses", value: "$287.75", change: "-8.3%", icon: "📉", color: "cyan" },
-    { label: "Active Budgets", value: "1", change: "On track", icon: "🎯", color: "violet" },
-];
+import { CardSkeleton } from "@/components/ui/empty-state";
+import { Badge } from "@/components/ui/modal";
+import { useAuth } from "@/lib/auth-context";
+import { getTransactions } from "@/lib/api/transactions";
+import { getBudgets, getBudgetSpent } from "@/lib/api/budgets";
+import { getMonthlySummaries, aggregateSummaries } from "@/lib/api/insights";
+import { getAccounts } from "@/lib/api/accounts";
+import type { Transaction, MonthlySummary, Budget, Account } from "@/types/database";
 
 export default function DashboardPage() {
+    const { ledger } = useAuth();
+    const [loading, setLoading] = useState(true);
+    const [recentTxns, setRecentTxns] = useState<Transaction[]>([]);
+    const [summary, setSummary] = useState<MonthlySummary | null>(null);
+    const [budgets, setBudgets] = useState<{ budget: Budget; spent: number }[]>([]);
+    const [accounts, setAccounts] = useState<Account[]>([]);
+
+    useEffect(() => {
+        if (!ledger) return;
+        const load = async () => {
+            setLoading(true);
+            const now = new Date();
+            const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+            const [txns, summaries, bList, accts] = await Promise.all([
+                getTransactions({ ledgerId: ledger.id, limit: 5 }).catch(() => []),
+                getMonthlySummaries(ledger.id, 1).catch(() => []),
+                getBudgets(ledger.id).catch(() => []),
+                getAccounts(ledger.id).catch(() => []),
+            ]);
+
+            setRecentTxns(txns);
+            setSummary(summaries[0] ?? null);
+            setAccounts(accts.filter((a) => a.is_active));
+
+            // Compute spent for each active budget
+            const budgetSpents = await Promise.all(
+                bList.filter((b) => b.is_active).slice(0, 4).map(async (b) => ({
+                    budget: b,
+                    spent: await getBudgetSpent(b).catch(() => 0),
+                }))
+            );
+            setBudgets(budgetSpents);
+
+            // Auto-aggregate if no summary exists
+            if (summaries.length === 0) {
+                await aggregateSummaries(ledger.id, month).catch(() => null);
+                const fresh = await getMonthlySummaries(ledger.id, 1).catch(() => []);
+                setSummary(fresh[0] ?? null);
+            }
+
+            setLoading(false);
+        };
+        load();
+    }, [ledger]);
+
+    const fmt = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const netWorth = accounts.reduce((s, a) => s + Number(a.balance), 0);
+
     return (
         <AppShell>
-            <div className="space-y-6">
-                {/* Header */}
+            <div className="mb-6 flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-                    <p className="mt-1 text-sm text-zinc-400">
-                        Overview of your financial health
-                    </p>
+                    <p className="text-sm text-zinc-400">Your financial overview</p>
                 </div>
+                <Link
+                    href="/transactions/new"
+                    className="rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-500/25 hover:shadow-xl hover:shadow-emerald-500/30 transition-all"
+                >
+                    + New Transaction
+                </Link>
+            </div>
 
-                {/* Stats Grid */}
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    {stats.map((stat) => (
-                        <div
-                            key={stat.label}
-                            className="group relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 backdrop-blur-sm transition-all hover:border-zinc-700 hover:bg-zinc-900/80"
-                        >
-                            <div className="absolute -right-4 -top-4 text-6xl opacity-10 transition-transform group-hover:scale-110">
-                                {stat.icon}
-                            </div>
-                            <p className="text-sm font-medium text-zinc-400">{stat.label}</p>
-                            <p className="mt-2 text-2xl font-bold text-white">{stat.value}</p>
-                            <p className={`mt-1 text-xs font-medium ${stat.change.startsWith("+") ? "text-emerald-400" :
-                                    stat.change.startsWith("-") ? "text-red-400" : "text-zinc-400"
-                                }`}>
-                                {stat.change}
-                            </p>
-                        </div>
-                    ))}
+            {/* Stats Grid */}
+            {loading ? (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+                    {Array.from({ length: 4 }).map((_, i) => <CardSkeleton key={i} />)}
                 </div>
+            ) : (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+                    <StatCard label="Total Income" value={fmt(summary?.total_income ?? 0)} icon="📈" color="emerald" />
+                    <StatCard label="Total Expenses" value={fmt(summary?.total_expense ?? 0)} icon="📉" color="red" />
+                    <StatCard label="Net Savings" value={fmt(summary?.net_savings ?? 0)} icon="💰" color={((summary?.net_savings ?? 0) >= 0) ? "emerald" : "red"} />
+                    <StatCard label="Net Worth" value={fmt(netWorth)} icon="🏦" color="blue" />
+                </div>
+            )}
 
-                {/* Quick Actions + Recent Transactions */}
-                <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-                    {/* Recent Transactions */}
-                    <div className="col-span-2 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 backdrop-blur-sm">
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-lg font-semibold text-white">Recent Transactions</h2>
-                            <a href="/transactions" className="text-sm text-emerald-400 hover:text-emerald-300 transition-colors">
-                                View all →
-                            </a>
-                        </div>
+            <div className="grid gap-6 lg:grid-cols-2">
+                {/* Recent Transactions */}
+                <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
+                    <div className="mb-4 flex items-center justify-between">
+                        <h2 className="text-lg font-semibold text-white">Recent Transactions</h2>
+                        <Link href="/transactions" className="text-xs text-emerald-400 hover:text-emerald-300">View all →</Link>
+                    </div>
+                    {recentTxns.length === 0 ? (
+                        <p className="py-8 text-center text-sm text-zinc-500">No transactions yet</p>
+                    ) : (
                         <div className="space-y-3">
-                            {[
-                                { desc: "February salary", amount: "+$4,500.00", icon: "💰", type: "income", date: "Feb 1" },
-                                { desc: "Weekly groceries", amount: "-$127.50", icon: "🛒", type: "expense", date: "Feb 3" },
-                                { desc: "Uber to airport", amount: "-$24.50", icon: "🚗", type: "expense", date: "Feb 4" },
-                                { desc: "Transfer to savings", amount: "$1,000.00", icon: "🔄", type: "transfer", date: "Feb 5" },
-                                { desc: "Refund — damaged goods", amount: "+$45.00", icon: "↩️", type: "refund", date: "Feb 8" },
-                            ].map((txn, i) => (
-                                <div
-                                    key={i}
-                                    className="flex items-center justify-between rounded-xl border border-zinc-800/50 bg-zinc-800/30 px-4 py-3 transition-all hover:bg-zinc-800/50"
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <span className="text-xl">{txn.icon}</span>
-                                        <div>
-                                            <p className="text-sm font-medium text-zinc-200">{txn.desc}</p>
-                                            <p className="text-xs text-zinc-500">{txn.date}</p>
-                                        </div>
+                            {recentTxns.map((txn) => (
+                                <div key={txn.id} className="flex items-center justify-between rounded-xl bg-zinc-800/30 px-4 py-3">
+                                    <div>
+                                        <p className="text-sm font-medium text-white">{txn.description || "Untitled"}</p>
+                                        <p className="text-xs text-zinc-400">{txn.date} · {txn.category?.name ?? "Uncategorized"}</p>
                                     </div>
-                                    <span className={`text-sm font-semibold ${txn.type === "income" || txn.type === "refund" ? "text-emerald-400" :
-                                            txn.type === "transfer" ? "text-zinc-400" : "text-red-400"
-                                        }`}>
-                                        {txn.amount}
+                                    <span className={`text-sm font-semibold ${txn.txn_type === "income" || txn.txn_type === "refund" ? "text-emerald-400" : "text-red-400"}`}>
+                                        {txn.txn_type === "income" || txn.txn_type === "refund" ? "+" : "-"}{fmt(Number(txn.amount))}
                                     </span>
                                 </div>
                             ))}
                         </div>
+                    )}
+                </div>
+
+                {/* Budget Summary */}
+                <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
+                    <div className="mb-4 flex items-center justify-between">
+                        <h2 className="text-lg font-semibold text-white">Budget Overview</h2>
+                        <Link href="/budgets" className="text-xs text-emerald-400 hover:text-emerald-300">Manage →</Link>
                     </div>
-
-                    {/* Quick Stats Sidebar */}
-                    <div className="space-y-4">
-                        {/* Budget Card */}
-                        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 backdrop-blur-sm">
-                            <h3 className="text-sm font-semibold text-zinc-400 mb-4">Food Budget</h3>
-                            <div className="flex items-end justify-between mb-2">
-                                <span className="text-2xl font-bold text-white">$287.75</span>
-                                <span className="text-sm text-zinc-400">/ $500</span>
-                            </div>
-                            <div className="h-2 rounded-full bg-zinc-800 overflow-hidden">
-                                <div className="h-full w-[57%] rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all" />
-                            </div>
-                            <p className="mt-2 text-xs text-zinc-500">57% used • $212.25 remaining</p>
-                        </div>
-
-                        {/* Upcoming Subscriptions */}
-                        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 backdrop-blur-sm">
-                            <h3 className="text-sm font-semibold text-zinc-400 mb-4">Upcoming</h3>
-                            <div className="space-y-3">
-                                {[
-                                    { name: "Netflix", amount: "$15.99", date: "Mar 1" },
-                                    { name: "Gym", amount: "$49.99", date: "Mar 1" },
-                                    { name: "Spotify", amount: "$9.99", date: "Mar 5" },
-                                ].map((sub) => (
-                                    <div key={sub.name} className="flex items-center justify-between text-sm">
-                                        <span className="text-zinc-300">{sub.name}</span>
-                                        <div className="text-right">
-                                            <span className="text-zinc-200">{sub.amount}</span>
-                                            <p className="text-xs text-zinc-500">{sub.date}</p>
+                    {budgets.length === 0 ? (
+                        <p className="py-8 text-center text-sm text-zinc-500">No active budgets</p>
+                    ) : (
+                        <div className="space-y-4">
+                            {budgets.map(({ budget, spent }) => {
+                                const pct = budget.amount > 0 ? Math.min((spent / budget.amount) * 100, 100) : 0;
+                                const isOver = spent > budget.amount;
+                                return (
+                                    <div key={budget.id}>
+                                        <div className="mb-1 flex items-center justify-between text-sm">
+                                            <span className="font-medium text-zinc-200">{budget.name}</span>
+                                            <span className={isOver ? "text-red-400" : "text-zinc-400"}>
+                                                {fmt(spent)} / {fmt(budget.amount)}
+                                            </span>
+                                        </div>
+                                        <div className="h-2 rounded-full bg-zinc-800">
+                                            <div
+                                                className={`h-2 rounded-full transition-all ${isOver ? "bg-red-500" : "bg-emerald-500"}`}
+                                                style={{ width: `${pct}%` }}
+                                            />
                                         </div>
                                     </div>
-                                ))}
-                            </div>
+                                );
+                            })}
                         </div>
+                    )}
+                </div>
+
+                {/* Accounts */}
+                <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 lg:col-span-2">
+                    <div className="mb-4 flex items-center justify-between">
+                        <h2 className="text-lg font-semibold text-white">Accounts</h2>
+                        <Link href="/accounts" className="text-xs text-emerald-400 hover:text-emerald-300">Manage →</Link>
                     </div>
+                    {accounts.length === 0 ? (
+                        <p className="py-4 text-center text-sm text-zinc-500">No accounts yet</p>
+                    ) : (
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                            {accounts.map((a) => (
+                                <div key={a.id} className="rounded-xl bg-zinc-800/30 px-4 py-3">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-sm font-medium text-zinc-200">{a.name}</span>
+                                        <Badge color={Number(a.balance) >= 0 ? "emerald" : "red"}>{a.account_type}</Badge>
+                                    </div>
+                                    <p className="mt-1 text-lg font-bold text-white">{fmt(Number(a.balance))}</p>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </div>
         </AppShell>
+    );
+}
+
+function StatCard({ label, value, icon, color }: { label: string; value: string; icon: string; color: string }) {
+    const borderColors: Record<string, string> = {
+        emerald: "border-emerald-800/50",
+        red: "border-red-800/50",
+        blue: "border-blue-800/50",
+        amber: "border-amber-800/50",
+    };
+    return (
+        <div className={`rounded-2xl border ${borderColors[color] ?? "border-zinc-800"} bg-zinc-900/50 p-5`}>
+            <div className="flex items-center justify-between">
+                <p className="text-sm text-zinc-400">{label}</p>
+                <span className="text-xl">{icon}</span>
+            </div>
+            <p className="mt-2 text-2xl font-bold text-white">{value}</p>
+        </div>
     );
 }
