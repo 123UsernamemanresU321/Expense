@@ -76,10 +76,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         const fetchLedgers = async () => {
             // Fetch memberships (RLS filters to user's ledgers)
-            const { data: memberships } = await supabase
+            const { data: memberships, error: memErr } = await supabase
                 .from("ledger_members")
                 .select("*, ledger:ledgers(*)")
                 .eq("user_id", auth.user!.id);
+
+            if (memErr) {
+                console.error("[FinanceHub] 🚨 ledger_members query failed:", memErr);
+            }
 
             if (!memberships || memberships.length === 0) {
                 setLedgerCtx({
