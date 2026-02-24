@@ -6,6 +6,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { EmptyState, TableSkeleton } from "@/components/ui/empty-state";
 import { Badge, Button, Select } from "@/components/ui/modal";
 import { useAuth } from "@/lib/auth-context";
+import { currencyFormatter } from "@/lib/format";
 import { getTransactions, deleteTransaction, type TxnFilters } from "@/lib/api/transactions";
 import { getCategories } from "@/lib/api/categories";
 import { getAccounts } from "@/lib/api/accounts";
@@ -74,7 +75,7 @@ export default function TransactionsPage() {
         fetchTxns();
     };
 
-    const fmt = (n: number) => `$${Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const fmt = currencyFormatter(ledger?.currency_code);
 
     const typeColor: Record<string, "emerald" | "red" | "blue" | "amber" | "purple"> = {
         income: "emerald", expense: "red", transfer: "blue", refund: "amber", adjustment: "purple",

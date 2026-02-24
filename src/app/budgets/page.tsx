@@ -5,6 +5,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { EmptyState, CardSkeleton } from "@/components/ui/empty-state";
 import { Button, Input, Select, Modal, Badge } from "@/components/ui/modal";
 import { useAuth } from "@/lib/auth-context";
+import { currencyFormatter } from "@/lib/format";
 import { getBudgets, createBudget, updateBudget, deleteBudget, getBudgetSpent } from "@/lib/api/budgets";
 import { getCategories } from "@/lib/api/categories";
 import { toast } from "@/lib/errors";
@@ -42,7 +43,7 @@ export default function BudgetsPage() {
         load();
     };
 
-    const fmt = (n: number) => `$${Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const fmt = currencyFormatter(ledger?.currency_code);
 
     return (
         <AppShell>

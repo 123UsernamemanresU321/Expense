@@ -6,6 +6,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { CardSkeleton } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/modal";
 import { useAuth } from "@/lib/auth-context";
+import { currencyFormatter } from "@/lib/format";
 import { getTransactions } from "@/lib/api/transactions";
 import { getBudgets, getBudgetSpent } from "@/lib/api/budgets";
 import { getMonthlySummaries, aggregateSummaries } from "@/lib/api/insights";
@@ -59,7 +60,7 @@ export default function DashboardPage() {
         load();
     }, [ledger]);
 
-    const fmt = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const fmt = currencyFormatter(ledger?.currency_code);
     const netWorth = accounts.reduce((s, a) => s + Number(a.balance), 0);
 
     return (

@@ -5,6 +5,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { CardSkeleton, EmptyState } from "@/components/ui/empty-state";
 import { Badge, Button } from "@/components/ui/modal";
 import { useAuth } from "@/lib/auth-context";
+import { currencyFormatter } from "@/lib/format";
 import { getMonthlySummaries, getInsights, markInsightsRead, generateInsights, aggregateSummaries } from "@/lib/api/insights";
 import { getAccounts } from "@/lib/api/accounts";
 import type { MonthlySummary, Insight, Account } from "@/types/database";
@@ -34,7 +35,7 @@ export default function AnalyticsPage() {
         load();
     }, [ledger]);
 
-    const fmt = (n: number) => `$${Number(n).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
+    const fmt = currencyFormatter(ledger?.currency_code);
     const netWorth = accounts.reduce((s, a) => s + Number(a.balance), 0);
 
     const handleRefreshInsights = async () => {

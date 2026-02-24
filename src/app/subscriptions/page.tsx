@@ -5,6 +5,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { EmptyState, TableSkeleton } from "@/components/ui/empty-state";
 import { Button, Input, Select, Modal, Badge } from "@/components/ui/modal";
 import { useAuth } from "@/lib/auth-context";
+import { currencyFormatter } from "@/lib/format";
 import { getSubscriptions, createSubscription, cancelSubscription, generateInstances } from "@/lib/api/subscriptions";
 import { getAccounts } from "@/lib/api/accounts";
 import { getCategories } from "@/lib/api/categories";
@@ -54,7 +55,7 @@ export default function SubscriptionsPage() {
         setGenerating(false);
     };
 
-    const fmt = (n: number) => `$${Number(n).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
+    const fmt = currencyFormatter(ledger?.currency_code);
     const monthlyTotal = subs.filter((s) => s.is_active).reduce((sum, s) => {
         const multiplier: Record<string, number> = { daily: 30, weekly: 4.33, monthly: 1, quarterly: 1 / 3, yearly: 1 / 12 };
         return sum + Number(s.amount) * (multiplier[s.interval] ?? 1);
