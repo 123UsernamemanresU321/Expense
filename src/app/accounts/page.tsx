@@ -6,7 +6,7 @@ import { EmptyState, CardSkeleton } from "@/components/ui/empty-state";
 import { Button, Input, Select, Modal, Badge } from "@/components/ui/modal";
 import { useAuth } from "@/lib/auth-context";
 import { currencyFormatter } from "@/lib/format";
-import { getAccounts, createAccount, updateAccount, reconcileAccount } from "@/lib/api/accounts";
+import { getAccounts, createAccount, updateAccount, reconcileAccount, hardDeleteAccount } from "@/lib/api/accounts";
 import { toast } from "@/lib/errors";
 import type { Account, AccountType } from "@/types/database";
 
@@ -76,10 +76,29 @@ export default function AccountsPage() {
                             </div>
                             <p className="text-2xl font-bold text-white mb-4">{fmt(Number(a.balance))}</p>
                             {a.institution && <p className="text-xs text-zinc-500 mb-3">{a.institution}</p>}
-                            {canWrite && a.is_active && (
-                                <div className="flex gap-2">
-                                    <Button variant="secondary" size="sm" onClick={() => { setShowReconcile(a); setReconBalance(""); }}>Reconcile</Button>
-                                    <Button variant="ghost" size="sm" onClick={async () => { await updateAccount(a.id, { is_active: false }); toast("Account deactivated", "info"); load(); }}>Deactivate</Button>
+                            {canWrite && (
+                                <div className="flex gap-2 flex-wrap mt-2">
+                                    {a.is_active && (
+                                        <>
+                                            <Button variant="secondary" size="sm" onClick={() => { setShowReconcile(a); setReconBalance(""); }}>Reconcile</Button>
+                                            <Button variant="ghost" size="sm" onClick={async () => { await updateAccount(a.id, { is_active: false }); toast("Account deactivated", "info"); load(); }}>Deactivate</Button>
+                                        </>
+                                    )}
+                                    <Button variant="ghost" size="sm" className="text-red-400 hover:text-red-300 hover:bg-red-400/10" onClick={async () => {
+                                        if (window.confirm("Are you sure you want to permanently delete this account?")) {
+                                            try {
+                                                await hardDeleteAccount(a.id);
+                                                toast("Account deleted", "success");
+                                                load();
+                                            } catch (err: any) {
+                                                if (err.message && err.message.includes("violates foreign key constraint")) {
+                                                    toast("Cannot delete account: it still has transactions. Move or delete them first.", "error");
+                                                } else {
+                                                    toast("Failed to delete account", "error");
+                                                }
+                                            }
+                                        }
+                                    }}>Delete</Button>
                                 </div>
                             )}
                         </div>

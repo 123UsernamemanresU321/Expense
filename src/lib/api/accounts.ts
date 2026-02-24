@@ -33,6 +33,10 @@ export async function deleteAccount(id: string): Promise<void> {
     unwrap(await supabase.from("accounts").update({ is_active: false }).eq("id", id));
 }
 
+export async function hardDeleteAccount(id: string): Promise<void> {
+    unwrap(await supabase.from("accounts").delete().eq("id", id));
+}
+
 // --- Reconciliation (via Edge Function) ---
 
 export async function reconcileAccount(input: {

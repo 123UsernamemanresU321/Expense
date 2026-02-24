@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/layout/app-shell";
 import { Button, Input, Select } from "@/components/ui/modal";
 import { useAuth } from "@/lib/auth-context";
-import { createTransaction } from "@/lib/api/transactions";
+import { createTransaction, createTransfer } from "@/lib/api/transactions";
 import { getCategories } from "@/lib/api/categories";
 import { getAccounts } from "@/lib/api/accounts";
 import { toast } from "@/lib/errors";
@@ -26,6 +26,7 @@ export default function NewTransactionPage() {
         notes: "",
         category_id: "",
         account_id: "",
+        to_account_id: "",
     });
 
     useEffect(() => {
@@ -40,23 +41,44 @@ export default function NewTransactionPage() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!ledger || !form.account_id || !form.amount) return;
+        if (form.txn_type === "transfer" && !form.to_account_id) {
+            toast("Please select a destination account for the transfer", "error");
+            return;
+        }
+        if (form.txn_type === "transfer" && form.account_id === form.to_account_id) {
+            toast("Cannot transfer to the same account", "error");
+            return;
+        }
+
         setLoading(true);
 
         try {
-            await createTransaction({
-                ledger_id: ledger.id,
-                account_id: form.account_id,
-                txn_type: form.txn_type,
-                amount: parseFloat(form.amount),
-                date: form.date,
-                description: form.description || undefined,
-                notes: form.notes || undefined,
-                category_id: form.category_id || undefined,
-            });
-            toast("Transaction created!", "success");
+            if (form.txn_type === "transfer") {
+                await createTransfer({
+                    ledger_id: ledger.id,
+                    from_account_id: form.account_id,
+                    to_account_id: form.to_account_id,
+                    amount: parseFloat(form.amount),
+                    date: form.date,
+                    description: form.description || undefined,
+                });
+                toast("Transfer complete!", "success");
+            } else {
+                await createTransaction({
+                    ledger_id: ledger.id,
+                    account_id: form.account_id,
+                    txn_type: form.txn_type,
+                    amount: parseFloat(form.amount),
+                    date: form.date,
+                    description: form.description || undefined,
+                    notes: form.notes || undefined,
+                    category_id: form.category_id || undefined,
+                });
+                toast("Transaction created!", "success");
+            }
             router.push("/transactions/");
         } catch {
-            toast("Failed to create transaction", "error");
+            toast(form.txn_type === "transfer" ? "Failed to create transfer" : "Failed to create transaction", "error");
         } finally {
             setLoading(false);
         }
@@ -90,11 +112,21 @@ export default function NewTransactionPage() {
 
                     <Select
                         id="account_id"
-                        label="Account"
+                        label={form.txn_type === "transfer" ? "From Account" : "Account"}
                         value={form.account_id}
                         onChange={(e) => set("account_id", e.target.value)}
                         options={[{ value: "", label: "Select account" }, ...accounts.map((a) => ({ value: a.id, label: a.name }))]}
                     />
+
+                    {form.txn_type === "transfer" && (
+                        <Select
+                            id="to_account_id"
+                            label="To Account"
+                            value={form.to_account_id}
+                            onChange={(e) => set("to_account_id", e.target.value)}
+                            options={[{ value: "", label: "Select destination" }, ...accounts.map((a) => ({ value: a.id, label: a.name }))]}
+                        />
+                    )}
 
                     <Select
                         id="category_id"
@@ -102,6 +134,7 @@ export default function NewTransactionPage() {
                         value={form.category_id}
                         onChange={(e) => set("category_id", e.target.value)}
                         options={[{ value: "", label: "None" }, ...categories.map((c) => ({ value: c.id, label: c.name }))]}
+                        disabled={form.txn_type === "transfer"}
                     />
 
                     <Input id="notes" label="Notes (optional)" value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder="Additional details" />
