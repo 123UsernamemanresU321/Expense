@@ -77,3 +77,38 @@ begin
   return new;
 end;
 $$;
+
+-- fn_validate_split_sum
+create or replace function public.fn_validate_split_sum()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_txn_id       uuid;
+  v_parent_amount numeric;
+  v_split_total   numeric;
+begin
+  if tg_op = 'DELETE' then
+    v_txn_id := old.transaction_id;
+  else
+    v_txn_id := new.transaction_id;
+  end if;
+
+  select amount into v_parent_amount
+  from public.transactions where id = v_txn_id;
+
+  select coalesce(sum(amount), 0) into v_split_total
+  from public.transaction_splits where transaction_id = v_txn_id;
+
+  if coalesce(v_parent_amount, 0) > 0 and v_split_total > v_parent_amount then
+    raise exception 'Split total (%) exceeds transaction amount (%)', v_split_total, v_parent_amount;
+  end if;
+
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+  return new;
+end;
+$$;
