@@ -1,18 +1,18 @@
 -- ============================================================
 -- 08_fix_audit_logs_nullable_ledger.sql
--- Fix: allow audit_logs.ledger_id to be NULL for tables
--- where ledger_id cannot always be resolved by the trigger
+-- Fix: allow audit_logs.ledger_id to be NULL and remove the
+-- FK constraint so cascading deletes don't fail the trigger
 -- ============================================================
 
--- Make ledger_id nullable (was NOT NULL in 01_enums_tables.sql)
+-- 1. Drop the foreign key constraint (cascade deletes cause trigger failures)
+alter table public.audit_logs
+  drop constraint if exists audit_logs_ledger_id_fkey;
+
+-- 2. Make ledger_id nullable
 alter table public.audit_logs
   alter column ledger_id drop not null;
 
--- Drop the existing foreign key constraint so null values are allowed
--- (The FK itself already allows nulls once NOT NULL is dropped)
-
--- Also update the trigger to handle more table shapes:
--- Add lookback for tables that have a ledger_id indirectly
+-- 3. Update the trigger to handle more table shapes
 create or replace function public.fn_audit_log()
 returns trigger
 language plpgsql
@@ -48,7 +48,6 @@ begin
   -- Extract ledger_id: direct column first
   if v_row_data ? 'ledger_id' then
     v_ledger_id := (v_row_data ->> 'ledger_id')::uuid;
-  -- Fallback: look up via parent FK
   elsif v_row_data ? 'transaction_id' then
     select t.ledger_id into v_ledger_id
     from public.transactions t
@@ -63,7 +62,7 @@ begin
     where a.id = (v_row_data ->> 'account_id')::uuid;
   end if;
 
-  -- v_ledger_id may still be null — that's okay now
+  -- v_ledger_id may be null — that's fine (no FK constraint now)
   insert into public.audit_logs (ledger_id, table_name, record_id, action, actor_id, before_data, after_data)
   values (v_ledger_id, tg_table_name, v_record_id, tg_op, v_actor, v_before, v_after);
 
