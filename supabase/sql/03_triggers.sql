@@ -82,26 +82,41 @@ declare
   v_before     jsonb;
   v_after      jsonb;
   v_actor      uuid;
+  v_row_data   jsonb;
 begin
   -- Determine actor — auth.uid() in RLS context, null in direct SQL
   v_actor := auth.uid();
 
+  -- Build JSONB representations first (works for any table shape)
   if tg_op = 'DELETE' then
     v_record_id := old.id;
     v_before    := to_jsonb(old);
     v_after     := null;
-    -- Try to get ledger_id from old row
-    v_ledger_id := old.ledger_id;
+    v_row_data  := v_before;
   elsif tg_op = 'INSERT' then
     v_record_id := new.id;
     v_before    := null;
     v_after     := to_jsonb(new);
-    v_ledger_id := new.ledger_id;
+    v_row_data  := v_after;
   else -- UPDATE
     v_record_id := new.id;
     v_before    := to_jsonb(old);
     v_after     := to_jsonb(new);
-    v_ledger_id := new.ledger_id;
+    v_row_data  := v_after;
+  end if;
+
+  -- Extract ledger_id from the row if the column exists
+  if v_row_data ? 'ledger_id' then
+    v_ledger_id := (v_row_data ->> 'ledger_id')::uuid;
+  -- For tables without ledger_id (e.g. transaction_splits), look it up
+  elsif v_row_data ? 'transaction_id' then
+    select t.ledger_id into v_ledger_id
+    from public.transactions t
+    where t.id = (v_row_data ->> 'transaction_id')::uuid;
+  elsif v_row_data ? 'budget_id' then
+    select b.ledger_id into v_ledger_id
+    from public.budgets b
+    where b.id = (v_row_data ->> 'budget_id')::uuid;
   end if;
 
   insert into public.audit_logs (ledger_id, table_name, record_id, action, actor_id, before_data, after_data)

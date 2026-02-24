@@ -23,7 +23,8 @@ export default function LoginPage() {
                 password,
             });
             if (error) throw error;
-            window.location.href = "/dashboard";
+            const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
+            window.location.href = `${basePath}/dashboard/`;
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : "Login failed";
             setError(message);

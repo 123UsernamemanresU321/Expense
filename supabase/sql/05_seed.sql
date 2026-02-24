@@ -11,13 +11,13 @@
 -- ============================================================
 -- PLACEHOLDER USER IDs — REPLACE THESE!
 -- ============================================================
--- User A (will be "owner") — replace with your first test user's UUID
--- User B (will be "editor") — replace with your second test user's UUID
+-- User A (owner) — Eric's account
+-- User B (editor) — demo/test user (create in Supabase Auth or remove)
 
 do $$
 declare
-  v_user_a   uuid := '00000000-0000-0000-0000-000000000001'; -- REPLACE ME
-  v_user_b   uuid := '00000000-0000-0000-0000-000000000002'; -- REPLACE ME
+  v_user_a   uuid := 'ab3df27c-c15a-415f-a3d1-3709e8ba39fe'; -- Eric (owner)
+  v_user_b   uuid := '00000000-0000-0000-0000-000000000002'; -- REPLACE with a second user or remove editor lines
   v_ledger   uuid;
   v_acct_chk uuid;
   v_acct_cc  uuid;
@@ -54,10 +54,13 @@ begin
   -- PROFILES (normally auto-created by trigger, but seed manually)
   -- ============================================================
   insert into public.profiles (id, email, display_name, currency_code)
-  values
-    (v_user_a, 'alice@example.com', 'Alice', 'USD'),
-    (v_user_b, 'bob@example.com', 'Bob', 'USD')
-  on conflict (id) do nothing;
+  values (v_user_a, 'eric@example.com', 'Eric', 'USD')
+  on conflict (id) do update set display_name = excluded.display_name;
+
+  -- Only insert User B if you created a second test user
+  -- insert into public.profiles (id, email, display_name, currency_code)
+  -- values (v_user_b, 'bob@example.com', 'Bob', 'USD')
+  -- on conflict (id) do nothing;
 
   -- ============================================================
   -- LEDGER (one shared ledger)
@@ -66,9 +69,9 @@ begin
   insert into public.ledgers (id, name, description, currency_code, created_by)
   values (v_ledger, 'Household Budget', 'Shared household finances', 'USD', v_user_a);
 
-  -- Trigger auto-adds owner; manually add editor
-  insert into public.ledger_members (ledger_id, user_id, role, invited_by)
-  values (v_ledger, v_user_b, 'editor', v_user_a);
+  -- Trigger auto-adds owner; add editor only if you have a second user
+  -- insert into public.ledger_members (ledger_id, user_id, role, invited_by)
+  -- values (v_ledger, v_user_b, 'editor', v_user_a);
 
   -- ============================================================
   -- ACCOUNTS
