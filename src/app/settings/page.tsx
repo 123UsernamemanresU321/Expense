@@ -14,27 +14,57 @@ import { toast } from "@/lib/errors";
 import type { ClassificationRule, Notification } from "@/types/database";
 
 // ─── Settings ────────────────────────────────────────────────────────
+const CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "JPY", "CHF", "CNY", "INR", "ZAR"];
+
 export default function SettingsPage() {
     const { user, ledger, role, canWrite, isOwnerOrAdmin, signOut } = useAuth();
     const [tab, setTab] = useState<"rules" | "export" | "import" | "audit" | "ocr" | "notifications">("rules");
+    const [currency, setCurrency] = useState(ledger?.currency_code ?? "USD");
+    const [saving, setSaving] = useState(false);
+
+    useEffect(() => { if (ledger) setCurrency(ledger.currency_code); }, [ledger]);
+
+    const handleCurrencyChange = async (newCurrency: string) => {
+        if (!ledger) return;
+        setCurrency(newCurrency);
+        setSaving(true);
+        await supabase.from("ledgers").update({ currency_code: newCurrency }).eq("id", ledger.id);
+        toast("Currency updated", "success");
+        setSaving(false);
+    };
 
     return (
         <AppShell>
-            <h1 className="text-2xl font-bold text-white mb-2">Settings</h1>
-            <p className="text-sm text-zinc-400 mb-6">Your role: <Badge color={role === "owner" ? "emerald" : role === "admin" ? "blue" : "zinc"}>{role ?? "—"}</Badge></p>
+            <h1 className="text-2xl font-bold mb-2" style={{ color: "var(--text-primary)" }}>Settings</h1>
+            <p className="text-sm mb-6" style={{ color: "var(--text-tertiary)" }}>Your role: <Badge color={role === "owner" ? "emerald" : role === "admin" ? "blue" : "zinc"}>{role ?? "—"}</Badge></p>
 
-            {/* Profile */}
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 mb-6">
-                <h2 className="text-lg font-semibold text-white mb-3">Profile</h2>
-                <p className="text-sm text-zinc-400">Email: <span className="text-white">{user?.email}</span></p>
-                <p className="text-sm text-zinc-400 mt-1">User ID: <span className="font-mono text-xs text-zinc-500">{user?.id}</span></p>
+            {/* Profile + Currency */}
+            <div className="rounded-2xl p-6 mb-6 themed-card">
+                <h2 className="text-lg font-semibold mb-3" style={{ color: "var(--text-primary)" }}>Profile & Ledger</h2>
+                <p className="text-sm" style={{ color: "var(--text-tertiary)" }}>Email: <span style={{ color: "var(--text-primary)" }}>{user?.email}</span></p>
+                <p className="text-sm mt-1" style={{ color: "var(--text-tertiary)" }}>Ledger: <span style={{ color: "var(--text-primary)" }}>{ledger?.name ?? "—"}</span></p>
+
+                <div className="mt-4 flex items-center gap-3">
+                    <label className="text-sm font-medium" style={{ color: "var(--text-secondary)" }}>Currency:</label>
+                    <select
+                        value={currency}
+                        onChange={(e) => handleCurrencyChange(e.target.value)}
+                        disabled={saving || !isOwnerOrAdmin}
+                        className="themed-input"
+                        style={{ width: "auto" }}
+                    >
+                        {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    {saving && <span className="text-xs" style={{ color: "var(--text-muted)" }}>Saving...</span>}
+                </div>
+
                 <Button variant="danger" size="sm" className="mt-4" onClick={signOut}>Sign Out</Button>
             </div>
 
             {/* Tab Bar */}
-            <div className="flex gap-1 rounded-xl bg-zinc-900 p-1 mb-6 overflow-x-auto">
+            <div className="flex gap-1 rounded-xl p-1 mb-6 overflow-x-auto" style={{ background: "var(--bg-secondary)" }}>
                 {(["rules", "export", "import", "audit", "ocr", "notifications"] as const).map((t) => (
-                    <button key={t} onClick={() => setTab(t)} className={`rounded-lg px-4 py-2 text-sm font-medium capitalize transition-colors ${tab === t ? "bg-zinc-800 text-white" : "text-zinc-400 hover:text-zinc-200"}`}>{t}</button>
+                    <button key={t} onClick={() => setTab(t)} className="rounded-lg px-4 py-2 text-sm font-medium capitalize transition-colors" style={tab === t ? { background: "var(--bg-tertiary)", color: "var(--text-primary)" } : { color: "var(--text-tertiary)" }}>{t}</button>
                 ))}
             </div>
 

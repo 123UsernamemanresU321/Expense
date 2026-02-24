@@ -7,6 +7,7 @@ export default function RegisterPage() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [displayName, setDisplayName] = useState("");
+    const [inviteCode, setInviteCode] = useState("");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
@@ -15,6 +16,14 @@ export default function RegisterPage() {
         e.preventDefault();
         setLoading(true);
         setError(null);
+
+        // Check invite code
+        const requiredCode = process.env.NEXT_PUBLIC_INVITE_CODE;
+        if (requiredCode && inviteCode !== requiredCode) {
+            setError("Invalid invite code. Only approved users can create accounts.");
+            setLoading(false);
+            return;
+        }
 
         try {
             const { supabase } = await import("@/lib/supabase/client");
@@ -37,16 +46,17 @@ export default function RegisterPage() {
 
     if (success) {
         return (
-            <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-4">
-                <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-900/50 p-8 text-center backdrop-blur-sm">
+            <div className="flex min-h-screen items-center justify-center px-4" style={{ background: "var(--bg-primary)" }}>
+                <div className="w-full max-w-md rounded-2xl p-8 text-center themed-card">
                     <div className="mb-4 text-5xl">✉️</div>
-                    <h1 className="text-xl font-bold text-white">Check your email</h1>
-                    <p className="mt-2 text-sm text-zinc-400">
-                        We sent a confirmation link to <strong className="text-white">{email}</strong>. Click the link to activate your account.
+                    <h1 className="text-xl font-bold" style={{ color: "var(--text-primary)" }}>Check your email</h1>
+                    <p className="mt-2 text-sm" style={{ color: "var(--text-tertiary)" }}>
+                        We sent a confirmation link to <strong style={{ color: "var(--text-primary)" }}>{email}</strong>. Click the link to activate your account.
                     </p>
                     <Link
                         href="/auth/login"
-                        className="mt-6 inline-block text-sm text-emerald-400 hover:text-emerald-300 transition-colors"
+                        className="mt-6 inline-block text-sm transition-colors"
+                        style={{ color: "var(--accent)" }}
                     >
                         ← Back to login
                     </Link>
@@ -56,7 +66,7 @@ export default function RegisterPage() {
     }
 
     return (
-        <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-4">
+        <div className="flex min-h-screen items-center justify-center px-4" style={{ background: "var(--bg-primary)" }}>
             <div className="pointer-events-none absolute inset-0 overflow-hidden">
                 <div className="absolute -top-40 left-1/2 h-80 w-80 -translate-x-1/2 rounded-full bg-teal-500/10 blur-3xl" />
             </div>
@@ -64,22 +74,37 @@ export default function RegisterPage() {
             <div className="relative z-10 w-full max-w-md">
                 <div className="mb-8 text-center">
                     <Link href="/" className="inline-block text-4xl mb-2">💰</Link>
-                    <h1 className="text-2xl font-bold text-white">Create your account</h1>
-                    <p className="mt-1 text-sm text-zinc-400">Start tracking your finances</p>
+                    <h1 className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>Create your account</h1>
+                    <p className="mt-1 text-sm" style={{ color: "var(--text-tertiary)" }}>An invite code is required to register</p>
                 </div>
 
                 <form
                     onSubmit={handleRegister}
-                    className="space-y-4 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-8 backdrop-blur-sm"
+                    className="space-y-4 rounded-2xl p-8 themed-card"
                 >
                     {error && (
-                        <div className="rounded-lg border border-red-800/50 bg-red-950/50 px-4 py-3 text-sm text-red-400">
+                        <div className="rounded-lg px-4 py-3 text-sm" style={{ background: "var(--danger-bg)", border: "1px solid var(--danger-border)", color: "var(--danger)" }}>
                             {error}
                         </div>
                     )}
 
                     <div>
-                        <label htmlFor="displayName" className="mb-1.5 block text-sm font-medium text-zinc-300">
+                        <label htmlFor="inviteCode" className="mb-1.5 block text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
+                            Invite Code 🔑
+                        </label>
+                        <input
+                            id="inviteCode"
+                            type="text"
+                            value={inviteCode}
+                            onChange={(e) => setInviteCode(e.target.value)}
+                            required
+                            className="w-full themed-input"
+                            placeholder="Enter your invite code"
+                        />
+                    </div>
+
+                    <div>
+                        <label htmlFor="displayName" className="mb-1.5 block text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
                             Name
                         </label>
                         <input
@@ -88,13 +113,13 @@ export default function RegisterPage() {
                             value={displayName}
                             onChange={(e) => setDisplayName(e.target.value)}
                             required
-                            className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm text-white placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                            className="w-full themed-input"
                             placeholder="Alice"
                         />
                     </div>
 
                     <div>
-                        <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-zinc-300">
+                        <label htmlFor="email" className="mb-1.5 block text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
                             Email
                         </label>
                         <input
@@ -103,13 +128,13 @@ export default function RegisterPage() {
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             required
-                            className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm text-white placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                            className="w-full themed-input"
                             placeholder="alice@example.com"
                         />
                     </div>
 
                     <div>
-                        <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-zinc-300">
+                        <label htmlFor="password" className="mb-1.5 block text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
                             Password
                         </label>
                         <input
@@ -119,7 +144,7 @@ export default function RegisterPage() {
                             onChange={(e) => setPassword(e.target.value)}
                             required
                             minLength={8}
-                            className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm text-white placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                            className="w-full themed-input"
                             placeholder="Minimum 8 characters"
                         />
                     </div>
@@ -132,9 +157,9 @@ export default function RegisterPage() {
                         {loading ? "Creating account..." : "Create Account"}
                     </button>
 
-                    <p className="text-center text-sm text-zinc-500">
+                    <p className="text-center text-sm" style={{ color: "var(--text-muted)" }}>
                         Already have an account?{" "}
-                        <Link href="/auth/login" className="text-emerald-400 hover:text-emerald-300 transition-colors">
+                        <Link href="/auth/login" className="transition-colors" style={{ color: "var(--accent)" }}>
                             Sign in
                         </Link>
                     </p>

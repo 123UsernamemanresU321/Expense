@@ -230,8 +230,11 @@ export function RequireAuth({
 }
 
 // --- Onboarding for brand-new users ---
+const CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "JPY", "CHF", "CNY", "INR", "ZAR"];
+
 function OnboardingScreen() {
     const [name, setName] = useState("");
+    const [currency, setCurrency] = useState("USD");
     const [creating, setCreating] = useState(false);
 
     const handleCreate = async () => {
@@ -239,27 +242,27 @@ function OnboardingScreen() {
         setCreating(true);
         try {
             const { createLedger } = await import("@/lib/api/shared");
-            await createLedger({ name: name.trim() });
-            window.location.reload(); // re-fetch ledgers
+            await createLedger({ name: name.trim(), currency_code: currency });
+            window.location.reload();
         } catch {
             setCreating(false);
         }
     };
 
     return (
-        <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-4">
+        <div className="flex min-h-screen items-center justify-center px-4" style={{ background: "var(--bg-primary)" }}>
             <div className="pointer-events-none absolute inset-0 overflow-hidden">
                 <div className="absolute -top-40 left-1/2 h-80 w-80 -translate-x-1/2 rounded-full bg-teal-500/10 blur-3xl" />
             </div>
             <div className="relative z-10 w-full max-w-md text-center">
                 <span className="text-5xl">💰</span>
-                <h1 className="mt-4 text-2xl font-bold text-white">Welcome to FinanceHub!</h1>
-                <p className="mt-2 text-sm text-zinc-400">
+                <h1 className="mt-4 text-2xl font-bold" style={{ color: "var(--text-primary)" }}>Welcome to FinanceHub!</h1>
+                <p className="mt-2 text-sm" style={{ color: "var(--text-tertiary)" }}>
                     Create your first ledger to start tracking your finances.
                 </p>
-                <div className="mt-8 space-y-4 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-8 text-left">
+                <div className="mt-8 space-y-4 rounded-2xl p-8 text-left themed-card">
                     <div>
-                        <label htmlFor="ledger-name" className="mb-1.5 block text-sm font-medium text-zinc-300">
+                        <label htmlFor="ledger-name" className="mb-1.5 block text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
                             Ledger Name
                         </label>
                         <input
@@ -269,8 +272,21 @@ function OnboardingScreen() {
                             onChange={(e) => setName(e.target.value)}
                             onKeyDown={(e) => e.key === "Enter" && handleCreate()}
                             placeholder="e.g. Personal Finance"
-                            className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm text-white placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                            className="w-full themed-input"
                         />
+                    </div>
+                    <div>
+                        <label htmlFor="currency" className="mb-1.5 block text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
+                            Currency
+                        </label>
+                        <select
+                            id="currency"
+                            value={currency}
+                            onChange={(e) => setCurrency(e.target.value)}
+                            className="w-full themed-input"
+                        >
+                            {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                        </select>
                     </div>
                     <button
                         onClick={handleCreate}
@@ -284,3 +300,4 @@ function OnboardingScreen() {
         </div>
     );
 }
+
