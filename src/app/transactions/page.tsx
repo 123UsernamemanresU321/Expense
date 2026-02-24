@@ -10,7 +10,7 @@ import { currencyFormatter } from "@/lib/format";
 import { getTransactions, deleteTransaction, type TxnFilters } from "@/lib/api/transactions";
 import { getCategories } from "@/lib/api/categories";
 import { getAccounts } from "@/lib/api/accounts";
-import { toast } from "@/lib/errors";
+import { toast, safe } from "@/lib/errors";
 import type { Transaction, Category, Account, TxnType } from "@/types/database";
 
 const PAGE_SIZE = 25;
@@ -70,9 +70,11 @@ export default function TransactionsPage() {
 
     const handleDelete = async (id: string) => {
         if (!confirm("Delete this transaction?")) return;
-        await deleteTransaction(id);
-        toast("Transaction deleted", "success");
-        fetchTxns();
+        const res = await safe(() => deleteTransaction(id), "Failed to delete transaction");
+        if (res !== null) {
+            toast("Transaction deleted", "success");
+            fetchTxns();
+        }
     };
 
     const fmt = currencyFormatter(ledger?.currency_code);

@@ -102,7 +102,7 @@ export async function updateTransaction(id: string, updates: Partial<Pick<Transa
 }
 
 export async function deleteTransaction(id: string): Promise<void> {
-    unwrap(await supabase.from("transactions").delete().eq("id", id));
+    unwrap(await supabase.from("transactions").delete().eq("id", id).select().single());
 }
 
 // --- Splits ---
