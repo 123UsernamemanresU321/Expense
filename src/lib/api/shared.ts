@@ -16,21 +16,30 @@ export async function createLedger(data: {
     currency_code?: string;
 }): Promise<Ledger> {
     const { data: { user } } = await supabase.auth.getUser();
-    const ledger: Ledger = unwrap(
-        await supabase.from("ledgers").insert({
-            name: data.name,
-            description: data.description ?? null,
-            currency_code: data.currency_code ?? "USD",
-            created_by: user!.id,
-        }).select().single()
-    );
+    const ledgerId = crypto.randomUUID();
 
-    // Auto-add creator as owner
-    await supabase.from("ledger_members").insert({
-        ledger_id: ledger.id,
+    // 1. Insert ledger with known ID (no .select() — SELECT policy needs membership)
+    const { error } = await supabase.from("ledgers").insert({
+        id: ledgerId,
+        name: data.name,
+        description: data.description ?? null,
+        currency_code: data.currency_code ?? "USD",
+        created_by: user!.id,
+    });
+    if (error) throw error;
+
+    // 2. Add creator as owner (policy lm_insert_creator allows this)
+    const { error: memError } = await supabase.from("ledger_members").insert({
+        ledger_id: ledgerId,
         user_id: user!.id,
         role: "owner",
     });
+    if (memError) throw memError;
+
+    // 3. Now we're a member — SELECT policy passes
+    const ledger: Ledger = unwrap(
+        await supabase.from("ledgers").select("*").eq("id", ledgerId).single()
+    );
 
     return ledger;
 }
