@@ -25,6 +25,7 @@ export default function DashboardPage() {
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [categorySpending, setCategorySpending] = useState<{ name: string; total: number; color: string }[]>([]);
     const [netWorth, setNetWorth] = useState(0);
+    const [convertedBalances, setConvertedBalances] = useState<Map<string, number>>(new Map());
     const [hasMultiCurrency, setHasMultiCurrency] = useState(false);
 
     useEffect(() => {
@@ -54,6 +55,14 @@ export default function DashboardPage() {
             const balItems = activeAccts.map((a) => ({ amount: Number(a.balance), currency: a.currency_code }));
             const convBal = await batchConvert(balItems, mainCurrency);
             setNetWorth(convBal.reduce((s, v) => s + v, 0));
+
+            const balMap = new Map<string, number>();
+            activeAccts.forEach((a, i) => {
+                if (a.currency_code !== mainCurrency) {
+                    balMap.set(a.id, convBal[i]);
+                }
+            });
+            setConvertedBalances(balMap);
 
             // Recent txns: convert each to main currency
             const recentItems = txns.map((t) => ({ amount: Number(t.amount), currency: t.currency_code || mainCurrency }));
@@ -237,15 +246,24 @@ export default function DashboardPage() {
                         <p className="py-4 text-center text-sm text-zinc-500">No accounts yet</p>
                     ) : (
                         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                            {accounts.map((a) => (
-                                <div key={a.id} className="rounded-xl bg-zinc-800/30 px-4 py-3">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-sm font-medium text-zinc-200">{a.name}</span>
-                                        <Badge color={Number(a.balance) >= 0 ? "emerald" : "red"}>{a.account_type}</Badge>
+                            {accounts.map((a) => {
+                                const isForeign = a.currency_code && a.currency_code !== mainCurrency;
+                                const acctFmt = currencyFormatter(a.currency_code);
+                                return (
+                                    <div key={a.id} className="rounded-xl bg-zinc-800/30 px-4 py-3">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-sm font-medium text-zinc-200">{a.name}</span>
+                                            <Badge color={Number(a.balance) >= 0 ? "emerald" : "red"}>{a.account_type.replace("_", " ")}</Badge>
+                                        </div>
+                                        <p className="mt-1 text-lg font-bold text-white">{acctFmt(Number(a.balance))}</p>
+                                        {isForeign && convertedBalances.has(a.id) && (
+                                            <p className="text-xs text-zinc-500 mt-0.5">
+                                                ≈ {fmt(convertedBalances.get(a.id)!)}
+                                            </p>
+                                        )}
                                     </div>
-                                    <p className="mt-1 text-lg font-bold text-white">{fmt(Number(a.balance))}</p>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     )}
                 </div>
