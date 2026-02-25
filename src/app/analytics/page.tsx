@@ -5,17 +5,22 @@ import { AppShell } from "@/components/layout/app-shell";
 import { CardSkeleton, EmptyState } from "@/components/ui/empty-state";
 import { Badge, Button } from "@/components/ui/modal";
 import { useAuth } from "@/lib/auth-context";
-import { currencyFormatter } from "@/lib/format";
+import { currencyFormatter, formatCurrency } from "@/lib/format";
 import { getMonthlySummaries, getInsights, markInsightsRead, generateInsights, aggregateSummaries } from "@/lib/api/insights";
 import { getAccounts } from "@/lib/api/accounts";
+import { batchConvert, getCurrencyInfo } from "@/lib/api/exchange-rates";
 import type { MonthlySummary, Insight, Account } from "@/types/database";
 
 export default function AnalyticsPage() {
     const { ledger } = useAuth();
+    const mainCurrency = ledger?.currency_code ?? "USD";
     const [loading, setLoading] = useState(true);
     const [summaries, setSummaries] = useState<MonthlySummary[]>([]);
     const [insights, setInsights] = useState<Insight[]>([]);
     const [accounts, setAccounts] = useState<Account[]>([]);
+    const [convertedBalances, setConvertedBalances] = useState<Map<string, number>>(new Map());
+    const [netWorth, setNetWorth] = useState(0);
+    const [hasMultiCurrency, setHasMultiCurrency] = useState(false);
     const [genLoading, setGenLoading] = useState(false);
 
     useEffect(() => {
@@ -27,16 +32,28 @@ export default function AnalyticsPage() {
                 getInsights(ledger.id).catch(() => []),
                 getAccounts(ledger.id).catch(() => []),
             ]);
+            const activeAccts = a.filter((x) => x.is_active);
             setSummaries(s);
             setInsights(i);
-            setAccounts(a.filter((x) => x.is_active));
+            setAccounts(activeAccts);
+
+            const multiCurr = activeAccts.some((acc) => acc.currency_code !== mainCurrency);
+            setHasMultiCurrency(multiCurr);
+
+            // Convert all account balances to main currency
+            const items = activeAccts.map((acc) => ({ amount: Number(acc.balance), currency: acc.currency_code }));
+            const converted = await batchConvert(items, mainCurrency);
+            const balMap = new Map<string, number>();
+            activeAccts.forEach((acc, idx) => balMap.set(acc.id, converted[idx]));
+            setConvertedBalances(balMap);
+            setNetWorth(converted.reduce((s, v) => s + v, 0));
+
             setLoading(false);
         };
         load();
-    }, [ledger]);
+    }, [ledger, mainCurrency]);
 
-    const fmt = currencyFormatter(ledger?.currency_code);
-    const netWorth = accounts.reduce((s, a) => s + Number(a.balance), 0);
+    const fmt = currencyFormatter(mainCurrency);
 
     const handleRefreshInsights = async () => {
         if (!ledger) return;
@@ -71,20 +88,35 @@ export default function AnalyticsPage() {
                 <>
                     {/* Net Worth / Balance Sheet */}
                     <div className="mb-8 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
-                        <h2 className="text-lg font-semibold text-white mb-4">💎 Net Worth: <span className={netWorth >= 0 ? "text-emerald-400" : "text-red-400"}>{fmt(netWorth)}</span></h2>
+                        <div className="flex items-center gap-2 mb-4">
+                            <h2 className="text-lg font-semibold text-white">💎 Net Worth: <span className={netWorth >= 0 ? "text-emerald-400" : "text-red-400"}>{fmt(netWorth)}</span></h2>
+                            {hasMultiCurrency && <span className="text-[10px] text-zinc-500 bg-zinc-800 rounded-full px-2 py-0.5">💱 converted to {mainCurrency}</span>}
+                        </div>
                         {accounts.length === 0 ? (
                             <p className="text-sm text-zinc-500">No accounts to show.</p>
                         ) : (
                             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                {accounts.map((a) => (
-                                    <div key={a.id} className="flex items-center justify-between rounded-xl bg-zinc-800/30 px-4 py-3">
-                                        <div>
-                                            <p className="text-sm font-medium text-zinc-200">{a.name}</p>
-                                            <p className="text-xs text-zinc-500">{a.account_type.replace("_", " ")}</p>
+                                {accounts.map((a) => {
+                                    const ci = getCurrencyInfo(a.currency_code);
+                                    const isForeign = a.currency_code !== mainCurrency;
+                                    const acctFmt = currencyFormatter(a.currency_code);
+                                    return (
+                                        <div key={a.id} className="flex items-center justify-between rounded-xl bg-zinc-800/30 px-4 py-3">
+                                            <div>
+                                                <p className="text-sm font-medium text-zinc-200">{a.name}</p>
+                                                <p className="text-xs text-zinc-500">{ci.flag} {a.account_type.replace("_", " ")}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <span className={`font-semibold ${Number(a.balance) >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                                                    {isForeign ? fmt(convertedBalances.get(a.id) ?? 0) : fmt(Number(a.balance))}
+                                                </span>
+                                                {isForeign && (
+                                                    <p className="text-[10px] text-zinc-500">{acctFmt(Number(a.balance))}</p>
+                                                )}
+                                            </div>
                                         </div>
-                                        <span className={`font-semibold ${Number(a.balance) >= 0 ? "text-emerald-400" : "text-red-400"}`}>{fmt(Number(a.balance))}</span>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         )}
                     </div>

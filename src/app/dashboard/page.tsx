@@ -6,7 +6,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { CardSkeleton } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/modal";
 import { useAuth } from "@/lib/auth-context";
-import { currencyFormatter } from "@/lib/format";
+import { currencyFormatter, formatCurrency } from "@/lib/format";
 import { getTransactions } from "@/lib/api/transactions";
 import { getBudgets, getBudgetSpent } from "@/lib/api/budgets";
 import { getMonthlySummaries, aggregateSummaries } from "@/lib/api/insights";
@@ -17,12 +17,15 @@ import type { Transaction, MonthlySummary, Budget, Account, Category } from "@/t
 
 export default function DashboardPage() {
     const { ledger } = useAuth();
+    const mainCurrency = ledger?.currency_code ?? "USD";
     const [loading, setLoading] = useState(true);
-    const [recentTxns, setRecentTxns] = useState<Transaction[]>([]);
-    const [summary, setSummary] = useState<MonthlySummary | null>(null);
+    const [recentTxns, setRecentTxns] = useState<{ txn: Transaction; converted: number }[]>([]);
+    const [convertedStats, setConvertedStats] = useState({ income: 0, expense: 0, savings: 0 });
     const [budgets, setBudgets] = useState<{ budget: Budget; spent: number }[]>([]);
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [categorySpending, setCategorySpending] = useState<{ name: string; total: number; color: string }[]>([]);
+    const [netWorth, setNetWorth] = useState(0);
+    const [hasMultiCurrency, setHasMultiCurrency] = useState(false);
 
     useEffect(() => {
         if (!ledger) return;
@@ -39,7 +42,22 @@ export default function DashboardPage() {
                 getCategories(ledger.id).catch(() => []),
             ]);
 
-            // Compute category spending for current month
+            const activeAccts = accts.filter((a) => a.is_active);
+            setAccounts(activeAccts);
+            const multiCurr = activeAccts.some((a) => a.currency_code !== mainCurrency);
+            setHasMultiCurrency(multiCurr);
+
+            // Net worth: convert all account balances
+            const balItems = activeAccts.map((a) => ({ amount: Number(a.balance), currency: a.currency_code }));
+            const convBal = await batchConvert(balItems, mainCurrency);
+            setNetWorth(convBal.reduce((s, v) => s + v, 0));
+
+            // Recent txns: convert each to main currency
+            const recentItems = txns.map((t) => ({ amount: Number(t.amount), currency: t.currency_code || mainCurrency }));
+            const convRecent = await batchConvert(recentItems, mainCurrency);
+            setRecentTxns(txns.map((t, i) => ({ txn: t, converted: convRecent[i] })));
+
+            // Compute category spending for current month (converted)
             const monthTxns = await getTransactions({
                 ledgerId: ledger.id,
                 startDate: `${month}-01`,
@@ -47,31 +65,48 @@ export default function DashboardPage() {
                 limit: 1000,
             }).catch(() => []);
 
+            const monthItems = monthTxns.map((t) => ({ amount: Number(t.amount), currency: t.currency_code || mainCurrency }));
+            const convMonth = await batchConvert(monthItems, mainCurrency);
+
+            let totalIncome = 0;
+            let totalExpense = 0;
             const spendMap = new Map<string, { name: string; total: number; color: string }>();
             const catMap = new Map(cats.map((c: Category) => [c.id, c]));
             const catColors = ["#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#3b82f6", "#ec4899", "#14b8a6", "#f97316"];
-            for (const t of monthTxns) {
-                if (t.txn_type !== "expense") continue;
+
+            monthTxns.forEach((t, i) => {
+                const amt = convMonth[i];
+                if (t.txn_type === "income" || t.txn_type === "refund") totalIncome += amt;
+                if (t.txn_type === "expense") totalExpense += amt;
+
+                if (t.txn_type !== "expense") return;
                 const catId = t.category_id ?? "uncategorized";
                 const cat = catMap.get(catId);
                 const existing = spendMap.get(catId);
                 if (existing) {
-                    existing.total += Number(t.amount);
+                    existing.total += amt;
                 } else {
                     spendMap.set(catId, {
                         name: cat?.name ?? "Uncategorized",
-                        total: Number(t.amount),
+                        total: amt,
                         color: catColors[spendMap.size % catColors.length],
                     });
                 }
-            }
+            });
+
+            setConvertedStats({ income: totalIncome, expense: totalExpense, savings: totalIncome - totalExpense });
             setCategorySpending(
                 Array.from(spendMap.values()).sort((a, b) => b.total - a.total).slice(0, 8)
             );
 
-            setRecentTxns(txns);
-            setSummary(summaries[0] ?? null);
-            setAccounts(accts.filter((a) => a.is_active));
+            // Fallback: use summary if no month txns were found
+            if (monthTxns.length === 0 && summaries[0]) {
+                setConvertedStats({
+                    income: summaries[0].total_income,
+                    expense: summaries[0].total_expense,
+                    savings: summaries[0].net_savings,
+                });
+            }
 
             // Compute spent for each active budget
             const budgetSpents = await Promise.all(
@@ -85,28 +120,15 @@ export default function DashboardPage() {
             // Auto-aggregate if no summary exists
             if (summaries.length === 0) {
                 await aggregateSummaries(ledger.id, month).catch(() => null);
-                const fresh = await getMonthlySummaries(ledger.id, 1).catch(() => []);
-                setSummary(fresh[0] ?? null);
             }
 
             setLoading(false);
         };
         load();
-    }, [ledger]);
+    }, [ledger, mainCurrency]);
 
-    const fmt = currencyFormatter(ledger?.currency_code);
-    const mainCurrency = ledger?.currency_code ?? "USD";
-    const [netWorth, setNetWorth] = useState(0);
-    const hasMultiCurrency = accounts.some((a) => a.currency_code !== mainCurrency);
-
-    // Convert all account balances to main currency for net worth
-    useEffect(() => {
-        if (accounts.length === 0) return;
-        const items = accounts.map((a) => ({ amount: Number(a.balance), currency: a.currency_code }));
-        batchConvert(items, mainCurrency).then((converted) => {
-            setNetWorth(converted.reduce((s, v) => s + v, 0));
-        });
-    }, [accounts, mainCurrency]);
+    const fmt = currencyFormatter(mainCurrency);
+    const convLabel = hasMultiCurrency ? "converted" : undefined;
 
     return (
         <AppShell>
@@ -130,10 +152,10 @@ export default function DashboardPage() {
                 </div>
             ) : (
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-                    <StatCard label="Total Income" value={fmt(summary?.total_income ?? 0)} icon="📈" color="emerald" />
-                    <StatCard label="Total Expenses" value={fmt(summary?.total_expense ?? 0)} icon="📉" color="red" />
-                    <StatCard label="Net Savings" value={fmt(summary?.net_savings ?? 0)} icon="💰" color={((summary?.net_savings ?? 0) >= 0) ? "emerald" : "red"} />
-                    <StatCard label="Net Worth" value={fmt(netWorth)} icon="🏦" color="blue" subtitle={hasMultiCurrency ? "converted" : undefined} />
+                    <StatCard label="Total Income" value={fmt(convertedStats.income)} icon="📈" color="emerald" subtitle={convLabel} />
+                    <StatCard label="Total Expenses" value={fmt(convertedStats.expense)} icon="📉" color="red" subtitle={convLabel} />
+                    <StatCard label="Net Savings" value={fmt(convertedStats.savings)} icon="💰" color={convertedStats.savings >= 0 ? "emerald" : "red"} subtitle={convLabel} />
+                    <StatCard label="Net Worth" value={fmt(netWorth)} icon="🏦" color="blue" subtitle={convLabel} />
                 </div>
             )}
 
@@ -148,15 +170,20 @@ export default function DashboardPage() {
                         <p className="py-8 text-center text-sm text-zinc-500">No transactions yet</p>
                     ) : (
                         <div className="space-y-3">
-                            {recentTxns.map((txn) => (
+                            {recentTxns.map(({ txn, converted }) => (
                                 <div key={txn.id} className="flex items-center justify-between rounded-xl bg-zinc-800/30 px-4 py-3">
                                     <div>
                                         <p className="text-sm font-medium text-white">{txn.description || "Untitled"}</p>
                                         <p className="text-xs text-zinc-400">{txn.date} · {txn.category?.name ?? "Uncategorized"}</p>
                                     </div>
-                                    <span className={`text-sm font-semibold ${txn.txn_type === "income" || txn.txn_type === "refund" ? "text-emerald-400" : "text-red-400"}`}>
-                                        {txn.txn_type === "income" || txn.txn_type === "refund" ? "+" : "-"}{fmt(Number(txn.amount))}
-                                    </span>
+                                    <div className="text-right">
+                                        <span className={`text-sm font-semibold ${txn.txn_type === "income" || txn.txn_type === "refund" ? "text-emerald-400" : "text-red-400"}`}>
+                                            {txn.txn_type === "income" || txn.txn_type === "refund" ? "+" : "-"}{fmt(converted)}
+                                        </span>
+                                        {txn.currency_code && txn.currency_code !== mainCurrency && (
+                                            <p className="text-[10px] text-zinc-500">{getCurrencyInfo(txn.currency_code).flag} {formatCurrency(Number(txn.amount), txn.currency_code)}</p>
+                                        )}
+                                    </div>
                                 </div>
                             ))}
                         </div>
