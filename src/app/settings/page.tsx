@@ -9,18 +9,19 @@ import { getRules, createRule, deleteRule, testRules, applyRules } from "@/lib/a
 import { createExport, pollExportJob } from "@/lib/api/exports";
 import { uploadAndCreateJob, processImportJob, pollImportJob } from "@/lib/api/imports";
 import { getNotifications, markAllRead, dismiss } from "@/lib/api/notifications";
+import { CURRENCIES as ALL_CURRENCIES } from "@/lib/api/exchange-rates";
 import { supabase } from "@/lib/supabase/client";
 import { toast } from "@/lib/errors";
 import type { ClassificationRule, Notification } from "@/types/database";
 
 // ─── Settings ────────────────────────────────────────────────────────
-const CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "JPY", "CHF", "CNY", "INR", "ZAR"];
 
 export default function SettingsPage() {
     const { user, ledger, role, canWrite, isOwnerOrAdmin, signOut } = useAuth();
     const [tab, setTab] = useState<"rules" | "export" | "import" | "audit" | "ocr" | "notifications">("rules");
     const [currency, setCurrency] = useState(ledger?.currency_code ?? "USD");
     const [saving, setSaving] = useState(false);
+    const [currSearch, setCurrSearch] = useState("");
 
     useEffect(() => { if (ledger) setCurrency(ledger.currency_code); }, [ledger]);
 
@@ -29,9 +30,13 @@ export default function SettingsPage() {
         setCurrency(newCurrency);
         setSaving(true);
         await supabase.from("ledgers").update({ currency_code: newCurrency }).eq("id", ledger.id);
-        toast("Currency updated", "success");
+        toast("Main currency updated — dashboard and analytics will use " + newCurrency, "success");
         setSaving(false);
     };
+
+    const filteredCurrencies = ALL_CURRENCIES.filter(
+        (c) => !currSearch || c.code.includes(currSearch.toUpperCase()) || c.name.toLowerCase().includes(currSearch.toLowerCase())
+    );
 
     return (
         <AppShell>
@@ -44,18 +49,34 @@ export default function SettingsPage() {
                 <p className="text-sm" style={{ color: "var(--text-tertiary)" }}>Email: <span style={{ color: "var(--text-primary)" }}>{user?.email}</span></p>
                 <p className="text-sm mt-1" style={{ color: "var(--text-tertiary)" }}>Ledger: <span style={{ color: "var(--text-primary)" }}>{ledger?.name ?? "—"}</span></p>
 
-                <div className="mt-4 flex items-center gap-3">
-                    <label className="text-sm font-medium" style={{ color: "var(--text-secondary)" }}>Currency:</label>
-                    <select
-                        value={currency}
-                        onChange={(e) => handleCurrencyChange(e.target.value)}
-                        disabled={saving || !isOwnerOrAdmin}
-                        className="themed-input"
-                        style={{ width: "auto" }}
-                    >
-                        {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                    {saving && <span className="text-xs" style={{ color: "var(--text-muted)" }}>Saving...</span>}
+                <div className="mt-4">
+                    <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
+                        Main Currency <span className="text-xs text-zinc-500">(used for dashboard & analytics)</span>
+                    </label>
+                    <input
+                        type="text"
+                        placeholder="Search currencies..."
+                        value={currSearch}
+                        onChange={(e) => setCurrSearch(e.target.value)}
+                        className="mb-2 w-full max-w-xs rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none"
+                    />
+                    <div className="max-h-48 overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-800 max-w-xs">
+                        {filteredCurrencies.map((c) => (
+                            <button
+                                key={c.code}
+                                type="button"
+                                disabled={saving || !isOwnerOrAdmin}
+                                onClick={() => { handleCurrencyChange(c.code); setCurrSearch(""); }}
+                                className={`flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-zinc-700 disabled:opacity-50 ${currency === c.code ? "bg-emerald-900/30 text-emerald-400" : "text-zinc-300"}`}
+                            >
+                                <span>{c.flag}</span>
+                                <span className="font-medium">{c.code}</span>
+                                <span className="text-zinc-500 text-xs">{c.name}</span>
+                                {currency === c.code && <span className="ml-auto text-xs">✓</span>}
+                            </button>
+                        ))}
+                    </div>
+                    {saving && <span className="text-xs mt-1 block" style={{ color: "var(--text-muted)" }}>Saving...</span>}
                 </div>
 
                 <Button variant="danger" size="sm" className="mt-4" onClick={signOut}>Sign Out</Button>

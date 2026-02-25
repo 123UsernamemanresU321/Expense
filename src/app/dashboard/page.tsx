@@ -12,6 +12,7 @@ import { getBudgets, getBudgetSpent } from "@/lib/api/budgets";
 import { getMonthlySummaries, aggregateSummaries } from "@/lib/api/insights";
 import { getAccounts } from "@/lib/api/accounts";
 import { getCategories } from "@/lib/api/categories";
+import { batchConvert, getCurrencyInfo } from "@/lib/api/exchange-rates";
 import type { Transaction, MonthlySummary, Budget, Account, Category } from "@/types/database";
 
 export default function DashboardPage() {
@@ -94,7 +95,18 @@ export default function DashboardPage() {
     }, [ledger]);
 
     const fmt = currencyFormatter(ledger?.currency_code);
-    const netWorth = accounts.reduce((s, a) => s + Number(a.balance), 0);
+    const mainCurrency = ledger?.currency_code ?? "USD";
+    const [netWorth, setNetWorth] = useState(0);
+    const hasMultiCurrency = accounts.some((a) => a.currency_code !== mainCurrency);
+
+    // Convert all account balances to main currency for net worth
+    useEffect(() => {
+        if (accounts.length === 0) return;
+        const items = accounts.map((a) => ({ amount: Number(a.balance), currency: a.currency_code }));
+        batchConvert(items, mainCurrency).then((converted) => {
+            setNetWorth(converted.reduce((s, v) => s + v, 0));
+        });
+    }, [accounts, mainCurrency]);
 
     return (
         <AppShell>
@@ -121,7 +133,7 @@ export default function DashboardPage() {
                     <StatCard label="Total Income" value={fmt(summary?.total_income ?? 0)} icon="📈" color="emerald" />
                     <StatCard label="Total Expenses" value={fmt(summary?.total_expense ?? 0)} icon="📉" color="red" />
                     <StatCard label="Net Savings" value={fmt(summary?.net_savings ?? 0)} icon="💰" color={((summary?.net_savings ?? 0) >= 0) ? "emerald" : "red"} />
-                    <StatCard label="Net Worth" value={fmt(netWorth)} icon="🏦" color="blue" />
+                    <StatCard label="Net Worth" value={fmt(netWorth)} icon="🏦" color="blue" subtitle={hasMultiCurrency ? "converted" : undefined} />
                 </div>
             )}
 
@@ -246,7 +258,7 @@ export default function DashboardPage() {
     );
 }
 
-function StatCard({ label, value, icon, color }: { label: string; value: string; icon: string; color: string }) {
+function StatCard({ label, value, icon, color, subtitle }: { label: string; value: string; icon: string; color: string; subtitle?: string }) {
     const borderColors: Record<string, string> = {
         emerald: "border-emerald-800/50",
         red: "border-red-800/50",
@@ -260,6 +272,7 @@ function StatCard({ label, value, icon, color }: { label: string; value: string;
                 <span className="text-xl">{icon}</span>
             </div>
             <p className="mt-2 text-2xl font-bold text-white">{value}</p>
+            {subtitle && <p className="text-[10px] text-zinc-500 mt-0.5">💱 {subtitle}</p>}
         </div>
     );
 }

@@ -7,10 +7,11 @@ import { EmptyState, TableSkeleton } from "@/components/ui/empty-state";
 import { Badge, Button, Select } from "@/components/ui/modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useAuth } from "@/lib/auth-context";
-import { currencyFormatter } from "@/lib/format";
+import { currencyFormatter, formatCurrency } from "@/lib/format";
 import { getTransactions, deleteTransaction, type TxnFilters } from "@/lib/api/transactions";
 import { getCategories } from "@/lib/api/categories";
 import { getAccounts } from "@/lib/api/accounts";
+import { getCurrencyInfo } from "@/lib/api/exchange-rates";
 import { toast, safe } from "@/lib/errors";
 import type { Transaction, Category, Account, TxnType } from "@/types/database";
 
@@ -214,8 +215,11 @@ export default function TransactionsPage() {
                                     <td className="px-4 py-3 text-zinc-400 hidden md:table-cell">{txn.category?.name ?? "—"}</td>
                                     <td className="px-4 py-3 text-zinc-400 hidden lg:table-cell">{txn.account?.name ?? "—"}</td>
                                     <td className="px-4 py-3"><Badge color={typeColor[txn.txn_type] ?? "zinc"}>{txn.txn_type}</Badge></td>
-                                    <td className={`px-4 py-3 text-right font-semibold whitespace-nowrap ${txn.txn_type === "income" || txn.txn_type === "refund" ? "text-emerald-400" : "text-red-400"}`}>
-                                        {txn.txn_type === "income" || txn.txn_type === "refund" ? "+" : "-"}{fmt(Number(txn.amount))}
+                                    <td className={`px-4 py-3 text-right whitespace-nowrap ${txn.txn_type === "income" || txn.txn_type === "refund" ? "text-emerald-400" : "text-red-400"}`}>
+                                        <span className="font-semibold">{txn.txn_type === "income" || txn.txn_type === "refund" ? "+" : "-"}{formatCurrency(Number(txn.amount), txn.currency_code || ledger?.currency_code)}</span>
+                                        {txn.currency_code && txn.currency_code !== (ledger?.currency_code ?? "USD") && (
+                                            <span className="ml-1 text-[10px] text-zinc-500">{getCurrencyInfo(txn.currency_code).flag}</span>
+                                        )}
                                     </td>
                                     {canWrite && (
                                         <td className="px-4 py-3">
