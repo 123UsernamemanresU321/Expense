@@ -12,7 +12,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "FinanceHub — Personal Finance Dashboard",
+  title: "Ledgerly — Personal Finance Dashboard",
   description:
     "Production-grade personal finance dashboard with multi-ledger support, budgets, and insights.",
 };

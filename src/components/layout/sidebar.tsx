@@ -45,7 +45,7 @@ export function Sidebar() {
                     <Link href="/dashboard" className="flex items-center gap-2">
                         <span className="text-xl">💰</span>
                         <span className="bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-lg font-bold text-transparent">
-                            FinanceHub
+                            Ledgerly
                         </span>
                     </Link>
                 )}
@@ -102,7 +102,7 @@ export function Sidebar() {
                 </button>
                 {!collapsed && (
                     <p className="mt-1 px-3 text-xs" style={{ color: "var(--text-muted)" }}>
-                        FinanceHub v0.2 · Press <kbd className="rounded border border-zinc-700 px-1 text-[10px]">?</kbd> for shortcuts
+                        Ledgerly v0.2 · Press <kbd className="rounded border border-zinc-700 px-1 text-[10px]">?</kbd> for shortcuts
                     </p>
                 )}
             </div>

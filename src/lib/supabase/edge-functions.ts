@@ -18,7 +18,7 @@ export async function callEdgeFunction<T = unknown>(
         });
 
         if (error) {
-            console.error(`[FinanceHub] 🚨 Edge Function ${functionName} failed:`, error);
+            console.error(`[Ledgerly] 🚨 Edge Function ${functionName} failed:`, error);
             return { data: null, error: error.message || "Edge function failed" };
         }
 

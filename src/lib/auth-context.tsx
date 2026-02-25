@@ -82,7 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 .eq("user_id", auth.user!.id);
 
             if (memErr) {
-                console.error("[FinanceHub] 🚨 ledger_members query failed:", memErr);
+                console.error("[Ledgerly] 🚨 ledger_members query failed:", memErr);
             }
 
             if (!memberships || memberships.length === 0) {
@@ -260,7 +260,7 @@ function OnboardingScreen() {
             </div>
             <div className="relative z-10 w-full max-w-md text-center">
                 <span className="text-5xl">💰</span>
-                <h1 className="mt-4 text-2xl font-bold" style={{ color: "var(--text-primary)" }}>Welcome to FinanceHub!</h1>
+                <h1 className="mt-4 text-2xl font-bold" style={{ color: "var(--text-primary)" }}>Welcome to Ledgerly!</h1>
                 <p className="mt-2 text-sm" style={{ color: "var(--text-tertiary)" }}>
                     Create your first ledger to start tracking your finances.
                 </p>

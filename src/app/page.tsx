@@ -14,7 +14,7 @@ export default function HomePage() {
       <div className="relative z-10 text-center">
         <div className="mb-6 text-6xl">💰</div>
         <h1 className="mb-4 bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 bg-clip-text text-5xl font-bold tracking-tight text-transparent">
-          FinanceHub
+          Ledgerly
         </h1>
         <p className="mb-8 max-w-md text-lg text-zinc-400">
           Your personal finance dashboard. Track expenses, manage budgets, and
