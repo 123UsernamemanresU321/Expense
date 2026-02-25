@@ -25,6 +25,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <head>
+        <link rel="icon" href={`${process.env.NEXT_PUBLIC_BASE_PATH || ""}/favicon.ico`} sizes="any" />
         {/* Prevent flash — set theme before paint */}
         <script dangerouslySetInnerHTML={{ __html: `try{const t=localStorage.getItem("theme")||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");document.documentElement.className=t==="dark"?"dark":""}catch(e){}` }} />
       </head>
