@@ -16,7 +16,7 @@ export interface AuthContext {
 export async function getUserId(authHeader: string | null): Promise<string | null> {
     if (!authHeader) return null;
     const admin = createAdminClient();
-    const token = authHeader.replace("Bearer ", "");
+    const token = authHeader.replace(/Bearer\s+/i, "");
     const { data, error } = await admin.auth.getUser(token);
     if (error || !data?.user) return null;
     return data.user.id;

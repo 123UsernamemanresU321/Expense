@@ -32,7 +32,10 @@ export default function DashboardPage() {
         const load = async () => {
             setLoading(true);
             const now = new Date();
-            const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+            const year = now.getFullYear();
+            const m = now.getMonth() + 1;
+            const lastDay = new Date(year, m, 0).getDate();
+            const month = `${year}-${String(m).padStart(2, "0")}`;
 
             const [txns, summaries, bList, accts, cats] = await Promise.all([
                 getTransactions({ ledgerId: ledger.id, limit: 5 }).catch(() => []),
@@ -61,7 +64,7 @@ export default function DashboardPage() {
             const monthTxns = await getTransactions({
                 ledgerId: ledger.id,
                 startDate: `${month}-01`,
-                endDate: `${month}-31`,
+                endDate: `${month}-${lastDay}`,
                 limit: 1000,
             }).catch(() => []);
 

@@ -19,7 +19,7 @@ function adminClient(): SupabaseClient {
 }
 async function getUid(admin: SupabaseClient, ah: string | null): Promise<string | null> {
     if (!ah) return null;
-    const { data } = await admin.auth.getUser(ah.replace("Bearer ", ""));
+    const { data } = await admin.auth.getUser(ah.replace(/Bearer\s+/i, ""));
     return data?.user?.id ?? null;
 }
 async function requireMember(admin: SupabaseClient, ah: string | null, lid: string, roles?: string[]) {

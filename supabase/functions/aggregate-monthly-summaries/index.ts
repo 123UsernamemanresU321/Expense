@@ -28,7 +28,7 @@ async function getUid(admin: SupabaseClient, authHeader: string | null): Promise
     console.log("[Auth] Checking token. Header exists:", !!authHeader);
     if (!authHeader) return null;
 
-    const token = authHeader.replace("Bearer ", "");
+    const token = authHeader.replace(/Bearer\s+/i, "");
     console.log("[Auth] Extracted token length:", token.length);
 
     const { data, error } = await admin.auth.getUser(token);
