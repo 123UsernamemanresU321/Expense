@@ -1,9 +1,27 @@
 -- 15_fix_trigger_currency_conversion.sql
 
+-- 0. Fix search_path warning on previously defined fn_get_txn_delta
+create or replace function public.fn_get_txn_delta(p_txn public.transactions)
+returns numeric
+language plpgsql immutable
+set search_path = ''
+as $$
+begin
+  if p_txn is null then return 0; end if;
+  if p_txn.txn_type in ('income', 'refund', 'adjustment') then return p_txn.amount; end if;
+  if p_txn.txn_type = 'expense' then return -p_txn.amount; end if;
+  if p_txn.txn_type = 'transfer' and p_txn.description ilike '%in%' then return p_txn.amount; end if;
+  if p_txn.txn_type = 'transfer' and p_txn.description ilike '%out%' then return -p_txn.amount; end if;
+  if p_txn.txn_type = 'transfer' then return -p_txn.amount; end if;
+  return 0;
+end;
+$$;
+
 -- 1. Create a function to convert currency using the exchange_rates table
 create or replace function public.fn_convert_currency(p_amount numeric, p_from text, p_to text, p_date date default null)
 returns numeric
 language plpgsql
+set search_path = ''
 as $$
 declare
   v_rate numeric;

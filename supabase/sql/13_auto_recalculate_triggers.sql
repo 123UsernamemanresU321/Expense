@@ -8,6 +8,7 @@
 create or replace function public.fn_get_txn_delta(p_txn public.transactions)
 returns numeric
 language plpgsql immutable
+set search_path = ''
 as $$
 begin
   if p_txn is null then return 0; end if;
