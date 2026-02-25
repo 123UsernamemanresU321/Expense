@@ -11,7 +11,8 @@ import { getTransactions } from "@/lib/api/transactions";
 import { getBudgets, getBudgetSpent } from "@/lib/api/budgets";
 import { getMonthlySummaries, aggregateSummaries } from "@/lib/api/insights";
 import { getAccounts } from "@/lib/api/accounts";
-import type { Transaction, MonthlySummary, Budget, Account } from "@/types/database";
+import { getCategories } from "@/lib/api/categories";
+import type { Transaction, MonthlySummary, Budget, Account, Category } from "@/types/database";
 
 export default function DashboardPage() {
     const { ledger } = useAuth();
@@ -20,6 +21,7 @@ export default function DashboardPage() {
     const [summary, setSummary] = useState<MonthlySummary | null>(null);
     const [budgets, setBudgets] = useState<{ budget: Budget; spent: number }[]>([]);
     const [accounts, setAccounts] = useState<Account[]>([]);
+    const [categorySpending, setCategorySpending] = useState<{ name: string; total: number; color: string }[]>([]);
 
     useEffect(() => {
         if (!ledger) return;
@@ -28,12 +30,43 @@ export default function DashboardPage() {
             const now = new Date();
             const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
-            const [txns, summaries, bList, accts] = await Promise.all([
+            const [txns, summaries, bList, accts, cats] = await Promise.all([
                 getTransactions({ ledgerId: ledger.id, limit: 5 }).catch(() => []),
                 getMonthlySummaries(ledger.id, 1).catch(() => []),
                 getBudgets(ledger.id).catch(() => []),
                 getAccounts(ledger.id).catch(() => []),
+                getCategories(ledger.id).catch(() => []),
             ]);
+
+            // Compute category spending for current month
+            const monthTxns = await getTransactions({
+                ledgerId: ledger.id,
+                startDate: `${month}-01`,
+                endDate: `${month}-31`,
+                limit: 1000,
+            }).catch(() => []);
+
+            const spendMap = new Map<string, { name: string; total: number; color: string }>();
+            const catMap = new Map(cats.map((c: Category) => [c.id, c]));
+            const catColors = ["#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#3b82f6", "#ec4899", "#14b8a6", "#f97316"];
+            for (const t of monthTxns) {
+                if (t.txn_type !== "expense") continue;
+                const catId = t.category_id ?? "uncategorized";
+                const cat = catMap.get(catId);
+                const existing = spendMap.get(catId);
+                if (existing) {
+                    existing.total += Number(t.amount);
+                } else {
+                    spendMap.set(catId, {
+                        name: cat?.name ?? "Uncategorized",
+                        total: Number(t.amount),
+                        color: catColors[spendMap.size % catColors.length],
+                    });
+                }
+            }
+            setCategorySpending(
+                Array.from(spendMap.values()).sort((a, b) => b.total - a.total).slice(0, 8)
+            );
 
             setRecentTxns(txns);
             setSummary(summaries[0] ?? null);
@@ -171,6 +204,40 @@ export default function DashboardPage() {
                                     <p className="mt-1 text-lg font-bold text-white">{fmt(Number(a.balance))}</p>
                                 </div>
                             ))}
+                        </div>
+                    )}
+                </div>
+
+                {/* Category Spending Breakdown */}
+                <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 lg:col-span-2">
+                    <div className="mb-4 flex items-center justify-between">
+                        <h2 className="text-lg font-semibold text-white">Spending by Category</h2>
+                        <Link href="/categories" className="text-xs text-emerald-400 hover:text-emerald-300">Manage →</Link>
+                    </div>
+                    {categorySpending.length === 0 ? (
+                        <p className="py-4 text-center text-sm text-zinc-500">No expenses this month</p>
+                    ) : (
+                        <div className="space-y-3">
+                            {(() => {
+                                const maxSpend = Math.max(...categorySpending.map((c) => c.total));
+                                return categorySpending.map((cat) => (
+                                    <div key={cat.name}>
+                                        <div className="mb-1 flex items-center justify-between text-sm">
+                                            <span className="font-medium text-zinc-200">{cat.name}</span>
+                                            <span className="text-zinc-400">{fmt(cat.total)}</span>
+                                        </div>
+                                        <div className="h-2.5 rounded-full bg-zinc-800">
+                                            <div
+                                                className="h-2.5 rounded-full transition-all duration-500"
+                                                style={{
+                                                    width: `${(cat.total / maxSpend) * 100}%`,
+                                                    backgroundColor: cat.color,
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+                                ));
+                            })()}
                         </div>
                     )}
                 </div>

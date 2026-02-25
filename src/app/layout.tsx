@@ -4,6 +4,7 @@ import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
 import { ThemeProvider } from "@/lib/theme-context";
 import { ToastContainer } from "@/components/ui/toast";
+import { KeyboardShortcutsProvider } from "@/components/ui/keyboard-shortcuts";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -32,6 +33,7 @@ export default function RootLayout({
           <AuthProvider>
             {children}
             <ToastContainer />
+            <KeyboardShortcutsProvider />
           </AuthProvider>
         </ThemeProvider>
       </body>

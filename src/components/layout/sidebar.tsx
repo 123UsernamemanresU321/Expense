@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "@/lib/theme-context";
@@ -20,13 +20,25 @@ const navItems = [
 export function Sidebar() {
     const pathname = usePathname();
     const [collapsed, setCollapsed] = useState(false);
+    const [mobileOpen, setMobileOpen] = useState(false);
     const { theme, toggle } = useTheme();
 
-    return (
-        <aside
-            className={`fixed left-0 top-0 z-40 flex h-screen flex-col transition-all duration-300 ${collapsed ? "w-16" : "w-60"}`}
-            style={{ background: "var(--bg-secondary)", borderRight: "1px solid var(--border)" }}
-        >
+    // Close mobile sidebar on route change
+    useEffect(() => {
+        setMobileOpen(false);
+    }, [pathname]);
+
+    // Close mobile sidebar on resize to desktop
+    useEffect(() => {
+        const handleResize = () => {
+            if (window.innerWidth >= 768) setMobileOpen(false);
+        };
+        window.addEventListener("resize", handleResize);
+        return () => window.removeEventListener("resize", handleResize);
+    }, []);
+
+    const sidebarContent = (
+        <>
             {/* Logo */}
             <div className="flex h-16 shrink-0 items-center justify-between px-4" style={{ borderBottom: "1px solid var(--border)" }}>
                 {!collapsed && (
@@ -38,12 +50,15 @@ export function Sidebar() {
                     </Link>
                 )}
                 <button
-                    onClick={() => setCollapsed(!collapsed)}
+                    onClick={() => {
+                        if (window.innerWidth < 768) setMobileOpen(false);
+                        else setCollapsed(!collapsed);
+                    }}
                     className="rounded-lg p-1.5 transition-colors"
                     style={{ color: "var(--text-muted)" }}
                     aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
                 >
-                    {collapsed ? "→" : "←"}
+                    {window.innerWidth < 768 ? "✕" : collapsed ? "→" : "←"}
                 </button>
             </div>
 
@@ -86,9 +101,50 @@ export function Sidebar() {
                     {!collapsed && <span>{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>}
                 </button>
                 {!collapsed && (
-                    <p className="mt-1 px-3 text-xs" style={{ color: "var(--text-muted)" }}>FinanceHub v0.1</p>
+                    <p className="mt-1 px-3 text-xs" style={{ color: "var(--text-muted)" }}>
+                        FinanceHub v0.2 · Press <kbd className="rounded border border-zinc-700 px-1 text-[10px]">?</kbd> for shortcuts
+                    </p>
                 )}
             </div>
-        </aside>
+        </>
+    );
+
+    return (
+        <>
+            {/* Mobile hamburger button */}
+            <button
+                onClick={() => setMobileOpen(true)}
+                className="fixed top-4 left-4 z-50 rounded-xl p-2 md:hidden"
+                style={{ background: "var(--bg-secondary)", border: "1px solid var(--border)" }}
+                aria-label="Open menu"
+            >
+                <span className="text-xl">☰</span>
+            </button>
+
+            {/* Mobile overlay */}
+            {mobileOpen && (
+                <div
+                    className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
+                    onClick={() => setMobileOpen(false)}
+                />
+            )}
+
+            {/* Mobile sidebar */}
+            <aside
+                className={`fixed left-0 top-0 z-50 flex h-screen w-64 flex-col transition-transform duration-300 md:hidden ${mobileOpen ? "translate-x-0" : "-translate-x-full"
+                    }`}
+                style={{ background: "var(--bg-secondary)", borderRight: "1px solid var(--border)" }}
+            >
+                {sidebarContent}
+            </aside>
+
+            {/* Desktop sidebar */}
+            <aside
+                className={`fixed left-0 top-0 z-40 hidden md:flex h-screen flex-col transition-all duration-300 ${collapsed ? "w-16" : "w-60"}`}
+                style={{ background: "var(--bg-secondary)", borderRight: "1px solid var(--border)" }}
+            >
+                {sidebarContent}
+            </aside>
+        </>
     );
 }
