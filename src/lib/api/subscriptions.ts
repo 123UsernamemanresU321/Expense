@@ -16,6 +16,7 @@ export async function createSubscription(data: {
     merchant_id?: string;
     name: string;
     amount: number;
+    currency_code: string;
     interval: SubInterval;
     next_due_date: string;
     notes?: string;
@@ -25,7 +26,7 @@ export async function createSubscription(data: {
     );
 }
 
-export async function updateSubscription(id: string, updates: Partial<Pick<Subscription, "name" | "amount" | "interval" | "next_due_date" | "is_active" | "account_id" | "category_id" | "notes">>): Promise<Subscription> {
+export async function updateSubscription(id: string, updates: Partial<Pick<Subscription, "name" | "amount" | "currency_code" | "interval" | "next_due_date" | "is_active" | "account_id" | "category_id" | "notes">>): Promise<Subscription> {
     return unwrap(
         await supabase.from("subscriptions").update(updates).eq("id", id).select().single()
     );

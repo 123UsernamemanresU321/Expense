@@ -152,9 +152,9 @@ export default function DashboardPage() {
                 </div>
             ) : (
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-                    <StatCard label="Total Income" value={fmt(convertedStats.income)} icon="📈" color="emerald" subtitle={convLabel} />
-                    <StatCard label="Total Expenses" value={fmt(convertedStats.expense)} icon="📉" color="red" subtitle={convLabel} />
-                    <StatCard label="Net Savings" value={fmt(convertedStats.savings)} icon="💰" color={convertedStats.savings >= 0 ? "emerald" : "red"} subtitle={convLabel} />
+                    <StatCard label="Total Income (This Month)" value={fmt(convertedStats.income)} icon="📈" color="emerald" subtitle={convLabel} />
+                    <StatCard label="Total Expenses (This Month)" value={fmt(convertedStats.expense)} icon="📉" color="red" subtitle={convLabel} />
+                    <StatCard label="Net Savings (This Month)" value={fmt(convertedStats.savings)} icon="💰" color={convertedStats.savings >= 0 ? "emerald" : "red"} subtitle={convLabel} />
                     <StatCard label="Net Worth" value={fmt(netWorth)} icon="🏦" color="blue" subtitle={convLabel} />
                 </div>
             )}
