@@ -18,8 +18,17 @@ function adminClient(): SupabaseClient {
     });
 }
 async function getUid(admin: SupabaseClient, ah: string | null): Promise<string | null> {
-    if (!ah) return null;
-    const { data } = await admin.auth.getUser(ah.replace(/Bearer\s+/i, ""));
+    if (!ah) {
+        console.error("[getUid] No authorization header provided in request.");
+        return null;
+    }
+    const token = ah.replace(/Bearer\s+/i, "");
+    const { data, error } = await admin.auth.getUser(token);
+
+    if (error) {
+        console.error("[getUid] Failed to verify JWT token:", error.message);
+    }
+
     return data?.user?.id ?? null;
 }
 async function requireMember(admin: SupabaseClient, ah: string | null, lid: string, roles?: string[]) {
