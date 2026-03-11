@@ -13,17 +13,23 @@ import { CURRENCIES as ALL_CURRENCIES } from "@/lib/api/exchange-rates";
 import { supabase } from "@/lib/supabase/client";
 import { toast } from "@/lib/errors";
 import type { ClassificationRule, Notification } from "@/types/database";
-
+import { type Ledger } from "@/types/database";
 // ─── Settings ────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
     const { user, ledger, role, canWrite, isOwnerOrAdmin, signOut } = useAuth();
     const [tab, setTab] = useState<"rules" | "export" | "import" | "audit" | "ocr" | "notifications">("rules");
     const [currency, setCurrency] = useState(ledger?.currency_code ?? "USD");
+    const [monthlyIncome, setMonthlyIncome] = useState(ledger?.monthly_income?.toString() ?? "0");
     const [saving, setSaving] = useState(false);
     const [currSearch, setCurrSearch] = useState("");
 
-    useEffect(() => { if (ledger) setCurrency(ledger.currency_code); }, [ledger]);
+    useEffect(() => { 
+        if (ledger) {
+            setCurrency(ledger.currency_code); 
+            setMonthlyIncome(ledger.monthly_income?.toString() ?? "0");
+        }
+    }, [ledger]);
 
     const handleCurrencyChange = async (newCurrency: string) => {
         if (!ledger) return;
@@ -79,7 +85,35 @@ export default function SettingsPage() {
                     {saving && <span className="text-xs mt-1 block" style={{ color: "var(--text-muted)" }}>Saving...</span>}
                 </div>
 
-                <Button variant="danger" size="sm" className="mt-4" onClick={signOut}>Sign Out</Button>
+                <div className="mt-4">
+                    <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
+                        Monthly Income <span className="text-xs text-zinc-500">(used for Wishlist calculations)</span>
+                    </label>
+                    <div className="flex gap-2 items-center max-w-xs">
+                        <input
+                            type="number"
+                            value={monthlyIncome}
+                            onChange={(e) => setMonthlyIncome(e.target.value)}
+                            className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none"
+                        />
+                        <Button
+                            size="sm"
+                            disabled={saving || !isOwnerOrAdmin}
+                            onClick={async () => {
+                                if (!ledger) return;
+                                setSaving(true);
+                                const num = parseFloat(monthlyIncome) || 0;
+                                await supabase.from("ledgers").update({ monthly_income: num }).eq("id", ledger.id);
+                                toast("Monthly income updated", "success");
+                                setSaving(false);
+                            }}
+                        >
+                            Save
+                        </Button>
+                    </div>
+                </div>
+
+                <Button variant="danger" size="sm" className="mt-6" onClick={signOut}>Sign Out</Button>
             </div>
 
             {/* Tab Bar */}

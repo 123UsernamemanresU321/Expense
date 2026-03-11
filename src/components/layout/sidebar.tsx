@@ -13,6 +13,7 @@ const navItems = [
     { href: "/categories", label: "Categories", icon: "📁" },
     { href: "/subscriptions", label: "Subscriptions", icon: "🔄" },
     { href: "/analytics", label: "Analytics", icon: "📈" },
+    { href: "/wishlist", label: "Wishlist", icon: "✨" },
     { href: "/shared", label: "Shared", icon: "👥" },
     { href: "/settings", label: "Settings", icon: "⚙️" },
 ];
