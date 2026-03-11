@@ -32,6 +32,7 @@ export interface Ledger {
     description: string | null;
     currency_code: string;
     monthly_income: number;
+    monthly_income_currency: string;
     fiscal_year_start: number;
     created_by: string;
     is_active: boolean;

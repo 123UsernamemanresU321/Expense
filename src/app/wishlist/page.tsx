@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth-context";
 import { getWishlistItems, createWishlistItem, toggleWishlistItemSelection, deleteWishlistItem, type WishlistItem } from "@/lib/api/wishlist";
 import { supabase } from "@/lib/supabase/client";
 import { toast } from "@/lib/errors";
+import { batchConvert, CURRENCIES as ALL_CURRENCIES } from "@/lib/api/exchange-rates";
 
 export default function WishlistPage() {
     const { ledger, canWrite } = useAuth();
@@ -15,8 +16,15 @@ export default function WishlistPage() {
     const [loading, setLoading] = useState(true);
     const [newItemName, setNewItemName] = useState("");
     const [newItemCost, setNewItemCost] = useState("");
+    const [newItemCurrency, setNewItemCurrency] = useState(ledger?.currency_code ?? "USD");
     const [adding, setAdding] = useState(false);
-    const [cashBalance, setCashBalance] = useState(0);
+    
+    const [cashBalanceMap, setCashBalanceMap] = useState<Map<string, number>>(new Map());
+    const [convertedCashBalance, setConvertedCashBalance] = useState(0);
+    const [convertedItems, setConvertedItems] = useState<{item: WishlistItem, convertedCost: number}[]>([]);
+    
+    // Convert numbers dynamically when items or cache changes
+    const mainCurrency = ledger?.currency_code ?? "USD";
 
     const loadItems = async () => {
         if (!ledger) return;
@@ -36,18 +44,43 @@ export default function WishlistPage() {
         try {
             const { data, error } = await supabase
                 .from("accounts")
-                .select("balance")
+                .select("balance, currency_code")
                 .eq("ledger_id", ledger.id)
                 .in("account_type", ["checking", "savings", "cash"])
                 .eq("is_active", true);
             
             if (error) throw error;
-            const total = data?.reduce((sum, acc) => sum + Number(acc.balance), 0) ?? 0;
-            setCashBalance(total);
+            const balMap = new Map<string, number>();
+            data?.forEach(acc => {
+                const cur = balMap.get(acc.currency_code) || 0;
+                balMap.set(acc.currency_code, cur + Number(acc.balance));
+            });
+            setCashBalanceMap(balMap);
         } catch {
             console.error("Failed to load cash balance");
         }
     };
+
+    const convertAll = async () => {
+        if (!ledger) return;
+        
+        // 1. Convert Cash balances to main Currency
+        const cashItems = Array.from(cashBalanceMap.entries()).map(([currency, amount]) => ({ amount, currency }));
+        const convCashItems = await batchConvert(cashItems, mainCurrency);
+        const totalCash = convCashItems.reduce((sum, val) => sum + val, 0);
+        setConvertedCashBalance(totalCash);
+
+        // 2. Convert Wishlist items to main Currency
+        const wishlistItems = items.map(item => ({ amount: Number(item.cost), currency: item.currency_code }));
+        const convWishlistItems = await batchConvert(wishlistItems, mainCurrency);
+        setConvertedItems(items.map((item, i) => ({ item, convertedCost: convWishlistItems[i] })));
+    };
+
+    useEffect(() => {
+        if (items.length >= 0 || cashBalanceMap.size >= 0) {
+            convertAll();
+        }
+    }, [items, cashBalanceMap, mainCurrency]);
 
     useEffect(() => {
         if (ledger) {
@@ -71,6 +104,7 @@ export default function WishlistPage() {
             const newItem = await createWishlistItem(ledger.id, {
                 name: newItemName,
                 cost,
+                currency_code: newItemCurrency,
                 is_selected: false
             });
             setItems([...items, newItem]);
@@ -105,26 +139,37 @@ export default function WishlistPage() {
         }
     };
 
-    // Derived Stats
-    const formatCurrency = (amount: number) => {
+    const formatCurrency = (amount: number, currency?: string) => {
         return new Intl.NumberFormat("en-US", {
             style: "currency",
-            currency: ledger?.currency_code || "USD",
+            currency: currency || mainCurrency,
         }).format(amount);
     };
 
-    const monthlyIncome = ledger?.monthly_income || 0;
+    const [convertedMonthlyIncome, setConvertedMonthlyIncome] = useState(0);
     
-    // Aggregate stats for selected items
-    const selectedItems = items.filter(item => item.is_selected);
-    const totalSelectedCost = selectedItems.reduce((sum, item) => sum + Number(item.cost), 0);
-    const comfortAfterSelected = cashBalance - totalSelectedCost;
+    useEffect(() => {
+        if (!ledger) return;
+        const income = ledger.monthly_income || 0;
+        const currency = ledger.monthly_income_currency || mainCurrency;
+        if (currency === mainCurrency) {
+            setConvertedMonthlyIncome(income);
+        } else {
+            batchConvert([{amount: income, currency}], mainCurrency)
+                .then(res => setConvertedMonthlyIncome(res[0]));
+        }
+    }, [ledger, mainCurrency]);
+    
+    // Aggregate stats for selected items (Using Converted costs)
+    const selectedConvertedItems = convertedItems.filter(x => x.item.is_selected);
+    const totalSelectedCost = selectedConvertedItems.reduce((sum, x) => sum + x.convertedCost, 0);
+    const comfortAfterSelected = convertedCashBalance - totalSelectedCost;
     
     // Time until can buy all selected
     // if cost <= cash, time is 0. Else (cost - cash) / income.
-    const timeToBuySelectedMonths = monthlyIncome > 0 
-        ? Math.max(0, (totalSelectedCost - cashBalance) / monthlyIncome) 
-        : (totalSelectedCost <= cashBalance ? 0 : Infinity);
+    const timeToBuySelectedMonths = convertedMonthlyIncome > 0 
+        ? Math.max(0, (totalSelectedCost - convertedCashBalance) / convertedMonthlyIncome) 
+        : (totalSelectedCost <= convertedCashBalance ? 0 : Infinity);
 
     const formatMonths = (months: number) => {
         if (months === 0) return "Can buy now";
@@ -148,14 +193,15 @@ export default function WishlistPage() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
                 <div className="rounded-2xl p-5 themed-card">
                     <p className="text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>Cash Comfort</p>
-                    <p className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>{formatCurrency(cashBalance)}</p>
+                    <p className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>{formatCurrency(convertedCashBalance)}</p>
                     <p className="text-xs mt-1" style={{ color: "var(--text-tertiary)" }}>Checking + Savings + Cash</p>
                 </div>
                 
-                <div className={`rounded-2xl p-5 border ${selectedItems.length > 0 ? 'border-blue-500/50 bg-blue-500/10' : 'themed-card border-transparent'}`}>
+                <div className={`rounded-2xl p-5 border ${selectedConvertedItems.length > 0 ? 'border-blue-500/50 bg-blue-500/10' : 'themed-card border-transparent'}`}>
                     <p className="text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>Selected Cost</p>
                     <p className="text-2xl font-bold text-blue-400">{formatCurrency(totalSelectedCost)}</p>
-                    <p className="text-xs mt-1" style={{ color: "var(--text-tertiary)" }}>{selectedItems.length} items selected</p>
+                    <p className="text-xs mt-1" style={{ color: "var(--text-tertiary)" }}>{selectedConvertedItems.length} items selected</p>
+                    <p className="text-[10px] text-zinc-500 mt-1">💱 converted to {mainCurrency}</p>
                 </div>
 
                 <div className="rounded-2xl p-5 themed-card relative overflow-hidden">
@@ -169,7 +215,7 @@ export default function WishlistPage() {
                 <div className="rounded-2xl p-5 themed-card">
                     <p className="text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>Time to Buy</p>
                     <p className="text-2xl font-bold text-amber-400">{formatMonths(timeToBuySelectedMonths)}</p>
-                    <p className="text-xs mt-1" style={{ color: "var(--text-tertiary)" }}>Based on avg income {formatCurrency(monthlyIncome)}/mo</p>
+                    <p className="text-xs mt-1" style={{ color: "var(--text-tertiary)" }}>Based on avg income {formatCurrency(convertedMonthlyIncome)}/mo</p>
                 </div>
             </div>
 
@@ -189,18 +235,32 @@ export default function WishlistPage() {
                                 className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none"
                             />
                         </div>
-                        <div className="w-48">
-                            <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>Estimated Cost</label>
-                            <input
-                                type="number"
-                                required
-                                min="0.01"
-                                step="0.01"
-                                value={newItemCost}
-                                onChange={(e) => setNewItemCost(e.target.value)}
-                                placeholder="0.00"
-                                className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none"
-                            />
+                        <div className="w-56 flex gap-2">
+                            <div className="w-20">
+                                <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>Cur</label>
+                                <select 
+                                    value={newItemCurrency}
+                                    onChange={(e) => setNewItemCurrency(e.target.value)}
+                                    className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-2 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none"
+                                >
+                                    {ALL_CURRENCIES.map(c => (
+                                        <option key={c.code} value={c.code}>{c.code}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="flex-1">
+                                <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>Cost</label>
+                                <input
+                                    type="number"
+                                    required
+                                    min="0.01"
+                                    step="0.01"
+                                    value={newItemCost}
+                                    onChange={(e) => setNewItemCost(e.target.value)}
+                                    placeholder="0.00"
+                                    className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none"
+                                />
+                            </div>
                         </div>
                         <Button type="submit" disabled={adding}>{adding ? "Adding..." : "Add to Wishlist"}</Button>
                     </form>
@@ -230,11 +290,12 @@ export default function WishlistPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-zinc-800/50">
-                                {items.map((item) => {
+                                {convertedItems.map(({item, convertedCost}) => {
                                     const cost = Number(item.cost);
-                                    const timeToBuyAlone = monthlyIncome > 0 
-                                        ? Math.max(0, (cost - cashBalance) / monthlyIncome) 
-                                        : (cost <= cashBalance ? 0 : Infinity);
+                                    const isForeign = item.currency_code !== mainCurrency;
+                                    const timeToBuyAlone = convertedMonthlyIncome > 0 
+                                        ? Math.max(0, (convertedCost - convertedCashBalance) / convertedMonthlyIncome) 
+                                        : (convertedCost <= convertedCashBalance ? 0 : Infinity);
 
                                     return (
                                         <tr key={item.id} className="hover:bg-zinc-800/20 transition-colors group">
@@ -251,7 +312,14 @@ export default function WishlistPage() {
                                                 <p className={`font-medium ${item.is_selected ? 'text-white' : 'text-zinc-300'}`}>{item.name}</p>
                                             </td>
                                             <td className="px-6 py-4 text-right">
-                                                <p className="font-mono text-zinc-300">{formatCurrency(cost)}</p>
+                                                <p className="font-mono text-zinc-300">
+                                                    {ALL_CURRENCIES.find(c => c.code === item.currency_code)?.flag} {formatCurrency(cost, item.currency_code)}
+                                                </p>
+                                                {isForeign && (
+                                                    <p className="text-[10px] text-zinc-500 mt-1">
+                                                        ≈ {formatCurrency(convertedCost, mainCurrency)}
+                                                    </p>
+                                                )}
                                             </td>
                                             <td className="px-6 py-4 text-right text-zinc-400">
                                                 {formatMonths(timeToBuyAlone)}

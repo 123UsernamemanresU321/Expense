@@ -20,14 +20,20 @@ export default function SettingsPage() {
     const { user, ledger, role, canWrite, isOwnerOrAdmin, signOut } = useAuth();
     const [tab, setTab] = useState<"rules" | "export" | "import" | "audit" | "ocr" | "notifications">("rules");
     const [currency, setCurrency] = useState(ledger?.currency_code ?? "USD");
-    const [monthlyIncome, setMonthlyIncome] = useState(ledger?.monthly_income?.toString() ?? "0");
     const [saving, setSaving] = useState(false);
     const [currSearch, setCurrSearch] = useState("");
+    
+    // Monthly income state
+    const [monthlyIncome, setMonthlyIncome] = useState(ledger?.monthly_income?.toString() ?? "0");
+    const [monthlyIncomeCurrency, setMonthlyIncomeCurrency] = useState(ledger?.monthly_income_currency ?? "USD");
+    const [showIncomeCurrencyDrop, setShowIncomeCurrencyDrop] = useState(false);
+    const [incomeCurrSearch, setIncomeCurrSearch] = useState("");
 
     useEffect(() => { 
         if (ledger) {
             setCurrency(ledger.currency_code); 
             setMonthlyIncome(ledger.monthly_income?.toString() ?? "0");
+            setMonthlyIncomeCurrency(ledger.monthly_income_currency ?? ledger.currency_code);
         }
     }, [ledger]);
 
@@ -42,6 +48,10 @@ export default function SettingsPage() {
 
     const filteredCurrencies = ALL_CURRENCIES.filter(
         (c) => !currSearch || c.code.includes(currSearch.toUpperCase()) || c.name.toLowerCase().includes(currSearch.toLowerCase())
+    );
+
+    const filteredIncomeCurrencies = ALL_CURRENCIES.filter(
+        (c) => !incomeCurrSearch || c.code.includes(incomeCurrSearch.toUpperCase()) || c.name.toLowerCase().includes(incomeCurrSearch.toLowerCase())
     );
 
     return (
@@ -89,12 +99,52 @@ export default function SettingsPage() {
                     <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
                         Monthly Income <span className="text-xs text-zinc-500">(used for Wishlist calculations)</span>
                     </label>
-                    <div className="flex gap-2 items-center max-w-xs">
+                    <div className="flex gap-2 items-center max-w-[24rem]">
+                        <div className="relative w-32 shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => setShowIncomeCurrencyDrop(!showIncomeCurrencyDrop)}
+                                className="flex w-full items-center justify-between rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none"
+                            >
+                                <span>{ALL_CURRENCIES.find(c => c.code === monthlyIncomeCurrency)?.flag} {monthlyIncomeCurrency}</span>
+                                <span className="text-zinc-500 text-xs">▼</span>
+                            </button>
+
+                            {showIncomeCurrencyDrop && (
+                                <div className="absolute top-full left-0 mt-1 z-10 w-48 rounded-xl border border-zinc-700 bg-zinc-800 shadow-xl overflow-hidden">
+                                    <input
+                                        type="text"
+                                        placeholder="Search..."
+                                        value={incomeCurrSearch}
+                                        onChange={(e) => setIncomeCurrSearch(e.target.value)}
+                                        className="w-full border-b border-zinc-700 bg-zinc-800/50 px-3 py-2 text-xs text-white placeholder:text-zinc-500 focus:outline-none"
+                                    />
+                                    <div className="max-h-48 overflow-y-auto">
+                                        {filteredIncomeCurrencies.map((c) => (
+                                            <button
+                                                key={c.code}
+                                                type="button"
+                                                onClick={() => {
+                                                    setMonthlyIncomeCurrency(c.code);
+                                                    setShowIncomeCurrencyDrop(false);
+                                                    setIncomeCurrSearch("");
+                                                }}
+                                                className={`flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-zinc-700 ${monthlyIncomeCurrency === c.code ? "bg-emerald-900/30 text-emerald-400" : "text-zinc-300"}`}
+                                            >
+                                                <span>{c.flag}</span>
+                                                <span className="font-medium">{c.code}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
                         <input
                             type="number"
                             value={monthlyIncome}
                             onChange={(e) => setMonthlyIncome(e.target.value)}
-                            className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none"
+                            className="w-full flex-1 rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none"
                         />
                         <Button
                             size="sm"
@@ -103,7 +153,10 @@ export default function SettingsPage() {
                                 if (!ledger) return;
                                 setSaving(true);
                                 const num = parseFloat(monthlyIncome) || 0;
-                                await supabase.from("ledgers").update({ monthly_income: num }).eq("id", ledger.id);
+                                await supabase.from("ledgers").update({ 
+                                    monthly_income: num,
+                                    monthly_income_currency: monthlyIncomeCurrency
+                                }).eq("id", ledger.id);
                                 toast("Monthly income updated", "success");
                                 setSaving(false);
                             }}
