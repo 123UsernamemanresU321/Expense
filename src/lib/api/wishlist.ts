@@ -37,6 +37,18 @@ export async function createWishlistItem(ledgerId: string, item: Omit<WishlistIt
     return data;
 }
 
+export async function updateWishlistItem(id: string, updates: Partial<Omit<WishlistItem, "id" | "ledger_id" | "created_at" | "updated_at">>): Promise<WishlistItem> {
+    const { data, error } = await supabase
+        .from("wishlist_items")
+        .update(updates)
+        .eq("id", id)
+        .select()
+        .single();
+
+    if (error) throw error;
+    return data;
+}
+
 export async function toggleWishlistItemSelection(id: string, isSelected: boolean): Promise<void> {
     const { error } = await supabase
         .from("wishlist_items")

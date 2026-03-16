@@ -5,7 +5,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { Button, Badge } from "@/components/ui/modal";
 import { EmptyState, TableSkeleton } from "@/components/ui/empty-state";
 import { useAuth } from "@/lib/auth-context";
-import { getWishlistItems, createWishlistItem, toggleWishlistItemSelection, deleteWishlistItem, type WishlistItem } from "@/lib/api/wishlist";
+import { getWishlistItems, createWishlistItem, updateWishlistItem, toggleWishlistItemSelection, deleteWishlistItem, type WishlistItem } from "@/lib/api/wishlist";
 import { supabase } from "@/lib/supabase/client";
 import { toast } from "@/lib/errors";
 import { batchConvert, CURRENCIES as ALL_CURRENCIES } from "@/lib/api/exchange-rates";
@@ -19,6 +19,10 @@ export default function WishlistPage() {
     const [newItemDiscount, setNewItemDiscount] = useState("0");
     const [newItemCurrency, setNewItemCurrency] = useState(ledger?.currency_code ?? "USD");
     const [adding, setAdding] = useState(false);
+    
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [editForm, setEditForm] = useState<{name: string, cost: string, discount: string, currency_code: string} | null>(null);
+    const [savingEdit, setSavingEdit] = useState(false);
     
     const [cashBalanceMap, setCashBalanceMap] = useState<Map<string, number>>(new Map());
     const [convertedCashBalance, setConvertedCashBalance] = useState(0);
@@ -119,6 +123,51 @@ export default function WishlistPage() {
             toast("Failed to add item", "error");
         } finally {
             setAdding(false);
+        }
+    };
+
+    const handleStartEdit = (item: WishlistItem) => {
+        if (!canWrite) return;
+        setEditingId(item.id);
+        setEditForm({
+            name: item.name,
+            cost: item.cost.toString(),
+            discount: (item.discount || 0).toString(),
+            currency_code: item.currency_code
+        });
+    };
+
+    const handleCancelEdit = () => {
+        setEditingId(null);
+        setEditForm(null);
+    };
+
+    const handleSaveEdit = async () => {
+        if (!editingId || !editForm || !ledger || !canWrite) return;
+        
+        const cost = parseFloat(editForm.cost);
+        const discountAmount = parseFloat(editForm.discount) || 0;
+        if (isNaN(cost) || cost <= 0) {
+            toast("Please enter a valid cost", "error");
+            return;
+        }
+
+        setSavingEdit(true);
+        try {
+            const updatedItem = await updateWishlistItem(editingId, {
+                name: editForm.name,
+                cost,
+                discount: discountAmount,
+                currency_code: editForm.currency_code
+            });
+            setItems(items.map(item => item.id === editingId ? { ...item, ...updatedItem } : item));
+            setEditingId(null);
+            setEditForm(null);
+            toast("Item updated", "success");
+        } catch {
+            toast("Failed to update item", "error");
+        } finally {
+            setSavingEdit(false);
         }
     };
 
@@ -318,43 +367,68 @@ export default function WishlistPage() {
                                             <td className="px-6 py-4">
                                                 <input
                                                     type="checkbox"
-                                                    disabled={!canWrite}
+                                                    disabled={!canWrite || editingId === item.id}
                                                     checked={item.is_selected}
                                                     onChange={() => handleToggleSelect(item.id, item.is_selected)}
                                                     className="rounded border-zinc-700 bg-zinc-800 text-emerald-500 focus:ring-emerald-500/20 cursor-pointer h-4 w-4"
                                                 />
                                             </td>
                                             <td className="px-6 py-4">
-                                                <p className={`font-medium ${item.is_selected ? 'text-white' : 'text-zinc-300'}`}>{item.name}</p>
+                                                {editingId === item.id && editForm ? (
+                                                    <input
+                                                        type="text"
+                                                        value={editForm.name}
+                                                        onChange={e => setEditForm({...editForm, name: e.target.value})}
+                                                        className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-sm text-white focus:border-emerald-500 focus:outline-none"
+                                                    />
+                                                ) : (
+                                                    <p className={`font-medium ${item.is_selected ? 'text-white' : 'text-zinc-300'}`}>{item.name}</p>
+                                                )}
                                             </td>
                                             <td className="px-6 py-4 text-right">
-                                                <p className="font-mono text-zinc-300">
-                                                    {ALL_CURRENCIES.find(c => c.code === item.currency_code)?.flag} {formatCurrency(Math.max(0, cost - Number(item.discount || 0)), item.currency_code)}
-                                                </p>
-                                                {Number(item.discount) > 0 && (
-                                                    <p className="text-[10px] text-emerald-400 mt-0.5">
-                                                        - {formatCurrency(Number(item.discount), item.currency_code)} discount
-                                                    </p>
-                                                )}
-                                                {isForeign && (
-                                                    <p className="text-[10px] text-zinc-500 mt-1">
-                                                        ≈ {formatCurrency(convertedCost, mainCurrency)}
-                                                    </p>
+                                                {editingId === item.id && editForm ? (
+                                                    <div className="flex flex-col gap-1 items-end">
+                                                        <div className="flex gap-1 w-40">
+                                                            <select value={editForm.currency_code} onChange={e => setEditForm({...editForm, currency_code: e.target.value})} className="rounded border border-zinc-700 bg-zinc-800 px-1 py-1 text-xs text-white">
+                                                                {ALL_CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.code}</option>)}
+                                                            </select>
+                                                            <input type="number" step="0.01" value={editForm.cost} onChange={e => setEditForm({...editForm, cost: e.target.value})} className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-sm text-white text-right focus:border-emerald-500 focus:outline-none" placeholder="Cost" />
+                                                        </div>
+                                                        <input type="number" step="0.01" value={editForm.discount} onChange={e => setEditForm({...editForm, discount: e.target.value})} className="w-[160px] rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-white text-right focus:border-emerald-500 focus:outline-none" placeholder="Discount" />
+                                                    </div>
+                                                ) : (
+                                                    <>
+                                                        <p className="font-mono text-zinc-300">
+                                                            {ALL_CURRENCIES.find(c => c.code === item.currency_code)?.flag} {formatCurrency(Math.max(0, cost - Number(item.discount || 0)), item.currency_code)}
+                                                        </p>
+                                                        {Number(item.discount) > 0 && (
+                                                            <p className="text-[10px] text-emerald-400 mt-0.5">
+                                                                - {formatCurrency(Number(item.discount), item.currency_code)} discount
+                                                            </p>
+                                                        )}
+                                                        {isForeign && (
+                                                            <p className="text-[10px] text-zinc-500 mt-1">
+                                                                ≈ {formatCurrency(convertedCost, mainCurrency)}
+                                                            </p>
+                                                        )}
+                                                    </>
                                                 )}
                                             </td>
                                             <td className="px-6 py-4 text-right text-zinc-400">
-                                                {formatMonths(timeToBuyAlone)}
+                                                {editingId === item.id ? "-" : formatMonths(timeToBuyAlone)}
                                             </td>
                                             <td className="px-6 py-4 text-right">
-                                                {canWrite && (
-                                                    <button
-                                                        onClick={() => handleDelete(item.id)}
-                                                        className="text-zinc-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-2 rounded-md hover:bg-red-400/10"
-                                                        title="Delete item"
-                                                    >
-                                                        🗑️
-                                                    </button>
-                                                )}
+                                                {canWrite && editingId === item.id ? (
+                                                    <div className="flex justify-end gap-1">
+                                                        <button onClick={handleSaveEdit} disabled={savingEdit} className="text-emerald-500 hover:text-emerald-400 p-1.5 rounded-md hover:bg-emerald-400/10" title="Save">✓</button>
+                                                        <button onClick={handleCancelEdit} className="text-zinc-500 hover:text-zinc-400 p-1.5 rounded-md hover:bg-zinc-400/10" title="Cancel">✕</button>
+                                                    </div>
+                                                ) : canWrite ? (
+                                                    <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <button onClick={() => handleStartEdit(item)} className="text-zinc-500 hover:text-blue-400 p-2 rounded-md hover:bg-blue-400/10" title="Edit item">✏️</button>
+                                                        <button onClick={() => handleDelete(item.id)} className="text-zinc-500 hover:text-red-400 p-2 rounded-md hover:bg-red-400/10" title="Delete item">🗑️</button>
+                                                    </div>
+                                                ) : null}
                                             </td>
                                         </tr>
                                     );
