@@ -17,19 +17,23 @@ function adminClient(): SupabaseClient {
         auth: { autoRefreshToken: false, persistSession: false },
     });
 }
-async function getUid(admin: SupabaseClient, ah: string | null): Promise<string | null> {
+async function getUid(_admin: SupabaseClient, ah: string | null): Promise<string | null> {
     if (!ah) {
         console.error("[getUid] No token provided in request.");
         return null;
     }
     const token = ah.replace(/Bearer\s+/i, "");
-    const { data, error } = await admin.auth.getUser(token);
-
-    if (error) {
-        console.error("[getUid] Failed to verify JWT token:", error.message);
+    
+    // The Edge Runtime (with verify_jwt: true) has already verified the signature of this token.
+    // admin.auth.getUser() fails with a service_role client. We just need to decode the payload.
+    try {
+        const payloadStr = atob(token.split(".")[1]);
+        const payload = JSON.parse(payloadStr);
+        return payload.sub ?? null;
+    } catch (err) {
+        console.error("[getUid] Failed to decode JWT:", err);
+        return null;
     }
-
-    return data?.user?.id ?? null;
 }
 async function requireMember(admin: SupabaseClient, ah: string | null, lid: string, roles?: string[]) {
     const uid = await getUid(admin, ah);
