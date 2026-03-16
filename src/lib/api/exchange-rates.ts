@@ -79,7 +79,7 @@ export async function getRate(from: string, to: string): Promise<number> {
         .eq("base_currency", from)
         .eq("quote_currency", to)
         .eq("rate_date", today)
-        .single();
+        .maybeSingle();
 
     if (dbRate?.rate) {
         rateCache.set(cacheKey, { rate: dbRate.rate, fetchedAt: Date.now() });
@@ -123,7 +123,7 @@ export async function getRate(from: string, to: string): Promise<number> {
             .eq("quote_currency", to)
             .order("rate_date", { ascending: false })
             .limit(1)
-            .single();
+            .maybeSingle();
 
         if (fallback?.rate) {
             rateCache.set(cacheKey, { rate: fallback.rate, fetchedAt: Date.now() });
