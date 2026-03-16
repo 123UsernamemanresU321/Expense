@@ -19,7 +19,7 @@ function adminClient(): SupabaseClient {
 }
 async function getUid(admin: SupabaseClient, ah: string | null): Promise<string | null> {
     if (!ah) {
-        console.error("[getUid] No authorization/x-user-jwt header provided in request.");
+        console.error("[getUid] No token provided in request.");
         return null;
     }
     const token = ah.replace(/Bearer\s+/i, "");
@@ -60,8 +60,9 @@ function generateCSV(rows: any[], columns: string[], computed?: Record<string, (
 Deno.serve(async (req: Request) => {
     if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
     try {
-        const authHeader = req.headers.get("x-user-jwt") || req.headers.get("authorization");
-        const { ledger_id, format, filters } = await req.json();
+        const body = await req.json();
+        const { ledger_id, format, filters, _user_jwt } = body;
+        const authHeader = _user_jwt || req.headers.get("authorization");
         if (!ledger_id) return json({ error: "ledger_id required" }, 400);
 
         const admin = adminClient();

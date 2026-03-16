@@ -26,10 +26,16 @@ export async function callEdgeFunction<T = unknown>(
             return { data: null, error: "Not authenticated — please sign in again." };
         }
 
+        // Inject the token into the body so it doesn't get stripped by Proxies
+        const bodyWithToken = {
+            ...body,
+            _user_jwt: session.access_token,
+        };
+
         const { data, error } = await supabase.functions.invoke(functionName, {
-            body: body,
+            body: bodyWithToken,
             headers: {
-                "x-user-jwt": session.access_token,
+                Authorization: `Bearer ${session.access_token}`,
             },
         });
 

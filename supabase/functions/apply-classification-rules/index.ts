@@ -19,7 +19,7 @@ function adminClient(): SupabaseClient {
 }
 async function getUid(admin: SupabaseClient, ah: string | null): Promise<string | null> {
     if (!ah) {
-        console.error("[getUid] No authorization/x-user-jwt header provided in request.");
+        console.error("[getUid] No token provided in request.");
         return null;
     }
     const token = ah.replace(/Bearer\s+/i, "");
@@ -43,8 +43,9 @@ async function requireMember(admin: SupabaseClient, ah: string | null, lid: stri
 Deno.serve(async (req: Request) => {
     if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
     try {
-        const authHeader = req.headers.get("x-user-jwt") || req.headers.get("authorization");
-        const { ledger_id, mode, lookback_days } = await req.json();
+        const body = await req.json();
+        const { ledger_id, mode, lookback_days, _user_jwt } = body;
+        const authHeader = _user_jwt || req.headers.get("authorization");
         if (!ledger_id || !mode) return json({ error: "ledger_id and mode ('test'|'apply') required" }, 400);
         if (mode !== "test" && mode !== "apply") return json({ error: "mode must be 'test' or 'apply'" }, 400);
 
