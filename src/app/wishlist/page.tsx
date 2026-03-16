@@ -76,7 +76,12 @@ export default function WishlistPage() {
         setConvertedCashBalance(totalCash);
 
         // 2. Convert Wishlist items to main Currency
-        const wishlistItems = items.map(item => ({ amount: Math.max(0, Number(item.cost) - Number(item.discount || 0)), currency: item.currency_code }));
+        const wishlistItems = items.map(item => {
+            const cost = Number(item.cost);
+            const discountPercent = Number(item.discount || 0);
+            const netCost = Math.max(0, cost * (1 - discountPercent / 100));
+            return { amount: netCost, currency: item.currency_code };
+        });
         const convWishlistItems = await batchConvert(wishlistItems, mainCurrency);
         setConvertedItems(items.map((item, i) => ({ item, convertedCost: convWishlistItems[i] })));
     };
@@ -315,14 +320,15 @@ export default function WishlistPage() {
                                 />
                             </div>
                             <div className="flex-1">
-                                <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>Discount</label>
+                                <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>Discount (%)</label>
                                 <input
                                     type="number"
                                     min="0"
-                                    step="0.01"
+                                    step="0.1"
+                                    max="100"
                                     value={newItemDiscount}
                                     onChange={(e) => setNewItemDiscount(e.target.value)}
-                                    placeholder="0.00"
+                                    placeholder="0"
                                     className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none"
                                 />
                             </div>
@@ -357,6 +363,9 @@ export default function WishlistPage() {
                             <tbody className="divide-y divide-zinc-800/50">
                                 {convertedItems.map(({item, convertedCost}) => {
                                     const cost = Number(item.cost);
+                                    const discountPercent = Number(item.discount || 0);
+                                    const netCost = Math.max(0, cost * (1 - discountPercent / 100));
+                                    const discountAmount = cost - netCost;
                                     const isForeign = item.currency_code !== mainCurrency;
                                     const timeToBuyAlone = convertedMonthlyIncome > 0 
                                         ? Math.max(0, (convertedCost - convertedCashBalance) / convertedMonthlyIncome) 
@@ -394,16 +403,16 @@ export default function WishlistPage() {
                                                             </select>
                                                             <input type="number" step="0.01" value={editForm.cost} onChange={e => setEditForm({...editForm, cost: e.target.value})} className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-sm text-white text-right focus:border-emerald-500 focus:outline-none" placeholder="Cost" />
                                                         </div>
-                                                        <input type="number" step="0.01" value={editForm.discount} onChange={e => setEditForm({...editForm, discount: e.target.value})} className="w-[160px] rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-white text-right focus:border-emerald-500 focus:outline-none" placeholder="Discount" />
+                                                        <input type="number" step="0.1" min="0" max="100" value={editForm.discount} onChange={e => setEditForm({...editForm, discount: e.target.value})} className="w-[160px] rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-white text-right focus:border-emerald-500 focus:outline-none" placeholder="Discount %" />
                                                     </div>
                                                 ) : (
                                                     <>
                                                         <p className="font-mono text-zinc-300">
-                                                            {ALL_CURRENCIES.find(c => c.code === item.currency_code)?.flag} {formatCurrency(Math.max(0, cost - Number(item.discount || 0)), item.currency_code)}
+                                                            {ALL_CURRENCIES.find(c => c.code === item.currency_code)?.flag} {formatCurrency(netCost, item.currency_code)}
                                                         </p>
-                                                        {Number(item.discount) > 0 && (
-                                                            <p className="text-[10px] text-emerald-400 mt-0.5">
-                                                                - {formatCurrency(Number(item.discount), item.currency_code)} discount
+                                                        {discountPercent > 0 && (
+                                                            <p className="text-[10px] text-emerald-400 mt-0.5" title={`Original cost: ${formatCurrency(cost, item.currency_code)}`}>
+                                                                - {discountPercent}% ({formatCurrency(discountAmount, item.currency_code)} off)
                                                             </p>
                                                         )}
                                                         {isForeign && (
