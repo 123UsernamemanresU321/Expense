@@ -6,7 +6,7 @@ import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-
 
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-user-jwt",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 function json(data: unknown, status = 200) {
@@ -19,7 +19,7 @@ function adminClient(): SupabaseClient {
 }
 async function getUid(admin: SupabaseClient, ah: string | null): Promise<string | null> {
     if (!ah) {
-        console.error("[getUid] No authorization header provided in request.");
+        console.error("[getUid] No authorization/x-user-jwt header provided in request.");
         return null;
     }
     const token = ah.replace(/Bearer\s+/i, "");
@@ -60,7 +60,7 @@ function generateCSV(rows: any[], columns: string[], computed?: Record<string, (
 Deno.serve(async (req: Request) => {
     if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
     try {
-        const authHeader = req.headers.get("authorization");
+        const authHeader = req.headers.get("x-user-jwt") || req.headers.get("authorization");
         const { ledger_id, format, filters } = await req.json();
         if (!ledger_id) return json({ error: "ledger_id required" }, 400);
 

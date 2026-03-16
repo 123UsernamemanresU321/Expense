@@ -29,7 +29,7 @@ export async function callEdgeFunction<T = unknown>(
         const { data, error } = await supabase.functions.invoke(functionName, {
             body: body,
             headers: {
-                Authorization: `Bearer ${session.access_token}`,
+                "x-user-jwt": session.access_token,
             },
         });
 
