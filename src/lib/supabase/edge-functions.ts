@@ -5,7 +5,7 @@ export interface EdgeFunctionResult<T = unknown> {
 
 /**
  * Calls a Supabase Edge Function by name.
- * Injects the user JWT automatically.
+ * Explicitly retrieves and injects the user JWT.
  */
 export async function callEdgeFunction<T = unknown>(
     functionName: string,
@@ -13,12 +13,24 @@ export async function callEdgeFunction<T = unknown>(
 ): Promise<EdgeFunctionResult<T>> {
     try {
         const { supabase } = await import("./client");
-        const { data: { session } } = await supabase.auth.getSession();
+
+        // Get the current session — if missing, the user is not logged in
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+        if (sessionError) {
+            console.error(`[Ledgerly] Session retrieval error for ${functionName}:`, sessionError.message);
+        }
+
+        if (!session?.access_token) {
+            console.error(`[Ledgerly] No active session when calling ${functionName}. User may not be authenticated.`);
+            return { data: null, error: "Not authenticated — please sign in again." };
+        }
+
         const { data, error } = await supabase.functions.invoke(functionName, {
             body: body,
-            headers: session?.access_token
-                ? { Authorization: `Bearer ${session.access_token}` }
-                : undefined,
+            headers: {
+                Authorization: `Bearer ${session.access_token}`,
+            },
         });
 
         if (error) {
@@ -34,3 +46,4 @@ export async function callEdgeFunction<T = unknown>(
         };
     }
 }
+
