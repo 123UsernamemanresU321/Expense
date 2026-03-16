@@ -5,6 +5,7 @@ export interface WishlistItem {
     ledger_id: string;
     name: string;
     cost: number;
+    discount: number;
     currency_code: string;
     is_selected: boolean;
     created_at: string;

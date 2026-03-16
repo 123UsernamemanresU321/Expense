@@ -16,6 +16,7 @@ export default function WishlistPage() {
     const [loading, setLoading] = useState(true);
     const [newItemName, setNewItemName] = useState("");
     const [newItemCost, setNewItemCost] = useState("");
+    const [newItemDiscount, setNewItemDiscount] = useState("0");
     const [newItemCurrency, setNewItemCurrency] = useState(ledger?.currency_code ?? "USD");
     const [adding, setAdding] = useState(false);
     
@@ -71,7 +72,7 @@ export default function WishlistPage() {
         setConvertedCashBalance(totalCash);
 
         // 2. Convert Wishlist items to main Currency
-        const wishlistItems = items.map(item => ({ amount: Number(item.cost), currency: item.currency_code }));
+        const wishlistItems = items.map(item => ({ amount: Math.max(0, Number(item.cost) - Number(item.discount || 0)), currency: item.currency_code }));
         const convWishlistItems = await batchConvert(wishlistItems, mainCurrency);
         setConvertedItems(items.map((item, i) => ({ item, convertedCost: convWishlistItems[i] })));
     };
@@ -94,6 +95,7 @@ export default function WishlistPage() {
         if (!ledger || !newItemName || !newItemCost || !canWrite) return;
         
         const cost = parseFloat(newItemCost);
+        const discountAmount = parseFloat(newItemDiscount) || 0;
         if (isNaN(cost) || cost <= 0) {
             toast("Please enter a valid cost", "error");
             return;
@@ -104,12 +106,14 @@ export default function WishlistPage() {
             const newItem = await createWishlistItem(ledger.id, {
                 name: newItemName,
                 cost,
+                discount: discountAmount,
                 currency_code: newItemCurrency,
                 is_selected: false
             });
             setItems([...items, newItem]);
             setNewItemName("");
             setNewItemCost("");
+            setNewItemDiscount("0");
             toast("Item added to wishlist", "success");
         } catch {
             toast("Failed to add item", "error");
@@ -235,7 +239,7 @@ export default function WishlistPage() {
                                 className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none"
                             />
                         </div>
-                        <div className="w-56 flex gap-2">
+                        <div className="w-80 flex gap-2">
                             <div className="w-20">
                                 <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>Cur</label>
                                 <select 
@@ -257,6 +261,18 @@ export default function WishlistPage() {
                                     step="0.01"
                                     value={newItemCost}
                                     onChange={(e) => setNewItemCost(e.target.value)}
+                                    placeholder="0.00"
+                                    className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none"
+                                />
+                            </div>
+                            <div className="flex-1">
+                                <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>Discount</label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={newItemDiscount}
+                                    onChange={(e) => setNewItemDiscount(e.target.value)}
                                     placeholder="0.00"
                                     className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none"
                                 />
@@ -313,8 +329,13 @@ export default function WishlistPage() {
                                             </td>
                                             <td className="px-6 py-4 text-right">
                                                 <p className="font-mono text-zinc-300">
-                                                    {ALL_CURRENCIES.find(c => c.code === item.currency_code)?.flag} {formatCurrency(cost, item.currency_code)}
+                                                    {ALL_CURRENCIES.find(c => c.code === item.currency_code)?.flag} {formatCurrency(Math.max(0, cost - Number(item.discount || 0)), item.currency_code)}
                                                 </p>
+                                                {Number(item.discount) > 0 && (
+                                                    <p className="text-[10px] text-emerald-400 mt-0.5">
+                                                        - {formatCurrency(Number(item.discount), item.currency_code)} discount
+                                                    </p>
+                                                )}
                                                 {isForeign && (
                                                     <p className="text-[10px] text-zinc-500 mt-1">
                                                         ≈ {formatCurrency(convertedCost, mainCurrency)}
