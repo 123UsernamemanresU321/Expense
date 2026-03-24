@@ -36,6 +36,7 @@ export async function callEdgeFunction<T = unknown>(
             body: bodyWithToken,
             headers: {
                 Authorization: `Bearer ${session.access_token}`,
+                "x-user-jwt": session.access_token,
             },
         });
 

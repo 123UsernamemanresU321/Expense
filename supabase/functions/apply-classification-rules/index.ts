@@ -47,7 +47,10 @@ Deno.serve(async (req: Request) => {
     try {
         const body = await req.json();
         const { ledger_id, mode, lookback_days, _user_jwt } = body;
-        const authHeader = _user_jwt || req.headers.get("authorization");
+        const authHeader = _user_jwt
+            || req.headers.get("x-user-jwt")
+            || req.headers.get("authorization");
+        console.log("[classify] Token sources — _user_jwt:", !!_user_jwt, "x-user-jwt header:", !!req.headers.get("x-user-jwt"), "authorization header:", !!req.headers.get("authorization"));
         if (!ledger_id || !mode) return json({ error: "ledger_id and mode ('test'|'apply') required" }, 400);
         if (mode !== "test" && mode !== "apply") return json({ error: "mode must be 'test' or 'apply'" }, 400);
 

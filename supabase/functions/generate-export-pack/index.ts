@@ -23,12 +23,15 @@ async function getUid(_admin: SupabaseClient, ah: string | null): Promise<string
         return null;
     }
     const token = ah.replace(/Bearer\s+/i, "");
+    if (!token || token.split(".").length !== 3) {
+        console.error("[getUid] Token is malformed. Parts:", token.split(".").length);
+        return null;
+    }
     
-    // The Edge Runtime (with verify_jwt: true) has already verified the signature of this token.
-    // admin.auth.getUser() fails with a service_role client. We just need to decode the payload.
     try {
         const payloadStr = atob(token.split(".")[1]);
         const payload = JSON.parse(payloadStr);
+        console.log("[getUid] Decoded sub:", payload.sub);
         return payload.sub ?? null;
     } catch (err) {
         console.error("[getUid] Failed to decode JWT:", err);
@@ -66,7 +69,11 @@ Deno.serve(async (req: Request) => {
     try {
         const body = await req.json();
         const { ledger_id, format, filters, _user_jwt } = body;
-        const authHeader = _user_jwt || req.headers.get("authorization");
+        // Try multiple token sources: body field, custom header, standard auth header
+        const authHeader = _user_jwt
+            || req.headers.get("x-user-jwt")
+            || req.headers.get("authorization");
+        console.log("[export] Token sources — _user_jwt:", !!_user_jwt, "x-user-jwt header:", !!req.headers.get("x-user-jwt"), "authorization header:", !!req.headers.get("authorization"));
         if (!ledger_id) return json({ error: "ledger_id required" }, 400);
 
         const admin = adminClient();
