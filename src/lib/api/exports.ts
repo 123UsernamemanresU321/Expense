@@ -9,8 +9,9 @@ export async function createExport(ledgerId: string, filters?: { start_date?: st
         success: boolean;
         job_id: string;
         storage_path: string;
-        signed_url: string | null;
         files: string[];
+        file_stats: Record<string, number>;
+        signed_urls: Record<string, string | null>;
         transaction_count: number;
     }>("generate-export-pack", { ledger_id: ledgerId, format: "csv", filters });
 }

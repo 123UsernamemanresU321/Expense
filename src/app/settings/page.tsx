@@ -227,24 +227,47 @@ function RulesTab() {
 function ExportTab() {
     const { ledger } = useAuth();
     const [exporting, setExporting] = useState(false);
-    const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+    const [exportResult, setExportResult] = useState<{ files: string[]; file_stats: Record<string, number>; signed_urls: Record<string, string | null> } | null>(null);
 
     const handleExport = async () => {
         if (!ledger) return;
-        setExporting(true); setDownloadUrl(null);
+        setExporting(true); setExportResult(null);
         const r = await createExport(ledger.id);
         if (r.error) { toast(r.error, "error"); setExporting(false); return; }
-        if (r.data?.signed_url) { setDownloadUrl(r.data.signed_url); toast("Export ready!", "success"); }
-        else toast("Export completed", "success");
+        if (r.data) {
+            setExportResult({ files: r.data.files, file_stats: r.data.file_stats, signed_urls: r.data.signed_urls });
+            toast("Export ready!", "success");
+        } else { toast("Export completed", "success"); }
         setExporting(false);
     };
 
+    const friendlyName = (f: string) => f.replace(/\.(csv|json)$/, "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+
     return (
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
-            <h2 className="text-lg font-semibold text-white mb-4">📦 Export Data</h2>
-            <p className="text-sm text-zinc-400 mb-4">Download your transactions, budgets, and categories as CSV/JSON.</p>
+            <h2 className="text-lg font-semibold text-white mb-2">📦 Export Data</h2>
+            <p className="text-sm text-zinc-400 mb-4">Download a complete backup of your ledger — accounts, transactions, categories, subscriptions, budgets, wishlist, and more.</p>
             <Button onClick={handleExport} disabled={exporting}>{exporting ? "Generating..." : "Generate Export Pack"}</Button>
-            {downloadUrl && <a href={downloadUrl} target="_blank" rel="noreferrer" className="ml-4 text-sm text-emerald-400 hover:text-emerald-300">⬇ Download</a>}
+            {exportResult && (
+                <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-800/30 p-4 space-y-2">
+                    <p className="text-xs text-zinc-500 mb-2">{exportResult.files.length} files generated</p>
+                    {exportResult.files.map(file => (
+                        <div key={file} className="flex items-center justify-between rounded-lg bg-zinc-900/50 px-3 py-2">
+                            <div>
+                                <p className="text-sm font-medium text-zinc-200">{friendlyName(file)}</p>
+                                {exportResult.file_stats[file] != null && (
+                                    <p className="text-xs text-zinc-500">{exportResult.file_stats[file]} rows</p>
+                                )}
+                            </div>
+                            {exportResult.signed_urls[file] ? (
+                                <a href={exportResult.signed_urls[file]!} target="_blank" rel="noreferrer" className="text-sm text-emerald-400 hover:text-emerald-300 font-medium">⬇ Download</a>
+                            ) : (
+                                <span className="text-xs text-zinc-600">No URL</span>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 }
