@@ -5,7 +5,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { CardSkeleton, EmptyState } from "@/components/ui/empty-state";
 import { Badge, Button } from "@/components/ui/modal";
 import { useAuth } from "@/lib/auth-context";
-import { currencyFormatter, formatCurrency } from "@/lib/format";
+import { currencyFormatter } from "@/lib/format";
 import { getMonthlySummaries, getInsights, markInsightsRead, generateInsights, aggregateSummaries } from "@/lib/api/insights";
 import { getAccounts } from "@/lib/api/accounts";
 import { batchConvert, getCurrencyInfo } from "@/lib/api/exchange-rates";

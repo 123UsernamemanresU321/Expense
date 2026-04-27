@@ -1,7 +1,13 @@
 import { supabase } from "@/lib/supabase/client";
 import { unwrap } from "@/lib/errors";
 import type { Budget, BudgetAlert, BudgetPeriod } from "@/types/database";
-import { batchConvert, getCurrencyInfo } from "@/lib/api/exchange-rates";
+import { batchConvert } from "@/lib/api/exchange-rates";
+
+type BudgetSpendTransaction = {
+    amount: number | string;
+    currency_code: string | null;
+    ledgers: { currency_code: string } | { currency_code: string }[] | null;
+};
 
 export async function getBudgets(ledgerId: string): Promise<Budget[]> {
     return unwrap(
@@ -79,10 +85,11 @@ export async function getBudgetSpent(budget: Budget): Promise<number> {
     if (budget.end_date) q = q.lte("date", budget.end_date);
     if (budget.category_id) q = q.eq("category_id", budget.category_id);
 
-    const txns = unwrap(await q) as any[];
+    const txns = unwrap(await q) as BudgetSpendTransaction[];
     if (txns.length === 0) return 0;
 
-    const mainCurrency = txns[0]?.ledgers?.currency_code || "USD";
+    const ledgerJoin = txns[0]?.ledgers;
+    const mainCurrency = (Array.isArray(ledgerJoin) ? ledgerJoin[0]?.currency_code : ledgerJoin?.currency_code) || "USD";
     const items = txns.map((t) => ({ amount: Number(t.amount), currency: t.currency_code || mainCurrency }));
 
     const converted = await batchConvert(items, mainCurrency);

@@ -127,7 +127,8 @@ export async function deleteSplits(transactionId: string): Promise<void> {
 
 export async function createRefund(originalTxnId: string, input: Omit<CreateTxnInput, "txn_type">): Promise<Transaction> {
     const { data: { user } } = await supabase.auth.getUser();
-    const { tag_ids, ...txnData } = input;
+    const txnData = { ...input };
+    delete txnData.tag_ids;
 
     return unwrap(
         await supabase.from("transactions").insert({

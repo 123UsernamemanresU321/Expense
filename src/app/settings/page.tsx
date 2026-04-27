@@ -1,23 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { Button, Badge } from "@/components/ui/modal";
 import { EmptyState, TableSkeleton } from "@/components/ui/empty-state";
 import { useAuth } from "@/lib/auth-context";
-import { getRules, createRule, deleteRule, testRules, applyRules } from "@/lib/api/rules";
-import { createExport, pollExportJob } from "@/lib/api/exports";
-import { uploadAndCreateJob, processImportJob, pollImportJob } from "@/lib/api/imports";
+import { getRules, deleteRule, testRules, applyRules } from "@/lib/api/rules";
+import { createExport } from "@/lib/api/exports";
+import { uploadAndCreateJob, processImportJob } from "@/lib/api/imports";
 import { getNotifications, markAllRead, dismiss } from "@/lib/api/notifications";
 import { CURRENCIES as ALL_CURRENCIES } from "@/lib/api/exchange-rates";
 import { supabase } from "@/lib/supabase/client";
 import { toast } from "@/lib/errors";
 import type { ClassificationRule, Notification } from "@/types/database";
-import { type Ledger } from "@/types/database";
 // ─── Settings ────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
-    const { user, ledger, role, canWrite, isOwnerOrAdmin, signOut } = useAuth();
+    const { user, ledger, role, isOwnerOrAdmin, signOut } = useAuth();
     const [tab, setTab] = useState<"rules" | "export" | "import" | "audit" | "ocr" | "notifications">("rules");
     const [currency, setCurrency] = useState(ledger?.currency_code ?? "USD");
     const [saving, setSaving] = useState(false);
@@ -194,8 +193,8 @@ function RulesTab() {
     const [testResult, setTestResult] = useState<{ matched: number; total: number; sample: { description: string; pattern: string }[] } | null>(null);
     const [applying, setApplying] = useState(false);
 
-    const load = async () => { if (!ledger) return; setLoading(true); setRules(await getRules(ledger.id).catch(() => [])); setLoading(false); };
-    useEffect(() => { load(); }, [ledger]);
+    const load = useCallback(async () => { if (!ledger) return; setLoading(true); setRules(await getRules(ledger.id).catch(() => [])); setLoading(false); }, [ledger]);
+    useEffect(() => { load(); }, [load]);
 
     const handleTest = async () => { if (!ledger) return; const r = await testRules(ledger.id); if (r.error) { toast(r.error, "error"); return; } setTestResult({ matched: r.data?.matched ?? 0, total: r.data?.total_transactions ?? 0, sample: r.data?.sample?.map((s: { description: string; pattern: string }) => ({ description: s.description, pattern: s.pattern })) ?? [] }); };
     const handleApply = async () => { if (!ledger) return; setApplying(true); const r = await applyRules(ledger.id); if (r.error) toast(r.error, "error"); else toast(`Applied to ${r.data?.applied ?? 0} transactions`, "success"); setApplying(false); setTestResult(null); };

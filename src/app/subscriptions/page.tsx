@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { EmptyState, TableSkeleton } from "@/components/ui/empty-state";
 import { Button, Input, Select, Modal, Badge } from "@/components/ui/modal";
@@ -26,7 +26,7 @@ export default function SubscriptionsPage() {
     const mainCurrency = ledger?.currency_code ?? "USD";
     const [monthlyTotal, setMonthlyTotal] = useState(0);
 
-    const load = async () => {
+    const load = useCallback(async () => {
         if (!ledger) return;
         setLoading(true);
         const [s, a, c] = await Promise.all([
@@ -51,9 +51,9 @@ export default function SubscriptionsPage() {
         setMonthlyTotal(converted.reduce((sum, v) => sum + v, 0));
 
         setLoading(false);
-    };
+    }, [ledger, mainCurrency]);
 
-    useEffect(() => { load(); }, [ledger]);
+    useEffect(() => { load(); }, [load]);
 
     const handleCreate = async () => {
         if (!ledger || !form.name || !form.amount || !form.account_id || !form.next_due_date) return;

@@ -5,8 +5,8 @@ export interface EdgeFunctionResult<T = unknown> {
 
 /**
  * Calls a Supabase Edge Function by name.
- * Uses direct fetch (not supabase.functions.invoke) to guarantee
- * the JWT reaches the function via multiple channels.
+ * Uses direct fetch (not supabase.functions.invoke) so error bodies are
+ * preserved for user-facing messages.
  */
 export async function callEdgeFunction<T = unknown>(
     functionName: string,
@@ -32,21 +32,14 @@ export async function callEdgeFunction<T = unknown>(
 
         const url = `${supabaseUrl}/functions/v1/${functionName}`;
 
-        // Send the JWT through multiple channels for maximum reliability
-        const bodyWithToken = {
-            ...body,
-            _user_jwt: session.access_token,
-        };
-
         const response = await fetch(url, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
                 "Authorization": `Bearer ${session.access_token}`,
                 "apikey": supabaseAnonKey,
-                "x-user-jwt": session.access_token,
             },
-            body: JSON.stringify(bodyWithToken),
+            body: JSON.stringify(body),
         });
 
         if (!response.ok) {
@@ -69,4 +62,3 @@ export async function callEdgeFunction<T = unknown>(
         };
     }
 }
-

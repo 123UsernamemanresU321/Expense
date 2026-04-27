@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { EmptyState, CardSkeleton } from "@/components/ui/empty-state";
 import { Button, Input, Select, Modal, Badge } from "@/components/ui/modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useAuth } from "@/lib/auth-context";
-import { currencyFormatter, formatCurrency } from "@/lib/format";
+import { currencyFormatter } from "@/lib/format";
 import { getAccounts, createAccount, updateAccount, reconcileAccount, hardDeleteAccount } from "@/lib/api/accounts";
 import { CURRENCIES, getCurrencyInfo, convert } from "@/lib/api/exchange-rates";
 import { toast } from "@/lib/errors";
@@ -31,7 +31,7 @@ export default function AccountsPage() {
     const [confirmDeactivate, setConfirmDeactivate] = useState<Account | null>(null);
     const [currencySearch, setCurrencySearch] = useState("");
 
-    const load = async () => {
+    const load = useCallback(async () => {
         if (!ledger) return;
         setLoading(true);
         const accts = await getAccounts(ledger.id).catch(() => []);
@@ -50,9 +50,9 @@ export default function AccountsPage() {
         );
         setConvertedBalances(converted);
         setLoading(false);
-    };
+    }, [ledger, mainCurrency]);
 
-    useEffect(() => { load(); }, [ledger]);
+    useEffect(() => { load(); }, [load]);
     useEffect(() => { setNewAcct((a) => ({ ...a, currency_code: mainCurrency })); }, [mainCurrency]);
 
     const handleCreate = async () => {

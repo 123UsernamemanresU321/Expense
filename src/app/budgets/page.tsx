@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { EmptyState, CardSkeleton } from "@/components/ui/empty-state";
 import { Button, Input, Select, Modal, Badge } from "@/components/ui/modal";
 import { useAuth } from "@/lib/auth-context";
 import { currencyFormatter } from "@/lib/format";
-import { getBudgets, createBudget, updateBudget, deleteBudget, getBudgetSpent } from "@/lib/api/budgets";
+import { getBudgets, createBudget, getBudgetSpent } from "@/lib/api/budgets";
 import { getCategories } from "@/lib/api/categories";
 import { toast } from "@/lib/errors";
 import type { Budget, BudgetPeriod, Category } from "@/types/database";
@@ -19,7 +19,7 @@ export default function BudgetsPage() {
     const [showCreate, setShowCreate] = useState(false);
     const [form, setForm] = useState({ name: "", amount: "", period: "monthly" as BudgetPeriod, category_id: "", start_date: new Date().toISOString().slice(0, 10) });
 
-    const load = async () => {
+    const load = useCallback(async () => {
         if (!ledger) return;
         setLoading(true);
         const [bList, cats] = await Promise.all([
@@ -30,9 +30,9 @@ export default function BudgetsPage() {
         const spents = await Promise.all(bList.map(async (b) => ({ budget: b, spent: await getBudgetSpent(b).catch(() => 0) })));
         setBudgets(spents);
         setLoading(false);
-    };
+    }, [ledger]);
 
-    useEffect(() => { load(); }, [ledger]);
+    useEffect(() => { load(); }, [load]);
 
     const handleCreate = async () => {
         if (!ledger || !form.name || !form.amount) return;

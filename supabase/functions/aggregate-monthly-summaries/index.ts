@@ -7,7 +7,7 @@ import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-
 // --- Inline Helpers ---
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret, x-user-jwt",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -25,17 +25,14 @@ function adminClient(): SupabaseClient {
 }
 
 async function getUid(admin: SupabaseClient, authHeader: string | null): Promise<string | null> {
-    console.log("[Auth] Checking token. Header exists:", !!authHeader);
     if (!authHeader) return null;
 
     const token = authHeader.replace(/Bearer\s+/i, "");
-    console.log("[Auth] Extracted token length:", token.length);
 
     const { data, error } = await admin.auth.getUser(token);
     if (error) {
         console.error("[Auth] Supabase getUser Error:", error.message, error.status);
     }
-    console.log("[Auth] User ID fetched:", data?.user?.id ?? "none");
 
     return data?.user?.id ?? null;
 }

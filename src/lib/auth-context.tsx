@@ -8,6 +8,7 @@ import {
     useMemo,
     useState,
 } from "react";
+import { useRouter } from "next/navigation";
 import type { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase/client";
 import type { LedgerRole, Ledger, LedgerMember } from "@/types/database";
@@ -193,6 +194,13 @@ export function RequireAuth({
     fallback?: React.ReactNode;
 }) {
     const { user, loading, role, ledger } = useAuth();
+    const router = useRouter();
+
+    useEffect(() => {
+        if (!loading && !user) {
+            router.replace("/auth/login/");
+        }
+    }, [loading, router, user]);
 
     if (loading) {
         return (
@@ -203,10 +211,6 @@ export function RequireAuth({
     }
 
     if (!user) {
-        if (typeof window !== "undefined") {
-            const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
-            window.location.href = `${basePath}/auth/login/`;
-        }
         return null;
     }
 
@@ -304,4 +308,3 @@ function OnboardingScreen() {
         </div>
     );
 }
-

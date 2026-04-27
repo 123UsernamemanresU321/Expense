@@ -24,11 +24,6 @@ export function Sidebar() {
     const [mobileOpen, setMobileOpen] = useState(false);
     const { theme, toggle } = useTheme();
 
-    // Close mobile sidebar on route change
-    useEffect(() => {
-        setMobileOpen(false);
-    }, [pathname]);
-
     // Close mobile sidebar on resize to desktop
     useEffect(() => {
         const handleResize = () => {
@@ -38,7 +33,7 @@ export function Sidebar() {
         return () => window.removeEventListener("resize", handleResize);
     }, []);
 
-    const sidebarContent = (
+    const sidebarContent = (isMobile: boolean) => (
         <>
             {/* Logo */}
             <div className="flex h-16 shrink-0 items-center justify-between px-4" style={{ borderBottom: "1px solid var(--border)" }}>
@@ -52,14 +47,14 @@ export function Sidebar() {
                 )}
                 <button
                     onClick={() => {
-                        if (window.innerWidth < 768) setMobileOpen(false);
+                        if (isMobile) setMobileOpen(false);
                         else setCollapsed(!collapsed);
                     }}
                     className="rounded-lg p-1.5 transition-colors"
                     style={{ color: "var(--text-muted)" }}
                     aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
                 >
-                    {window.innerWidth < 768 ? "✕" : collapsed ? "→" : "←"}
+                    {isMobile ? "✕" : collapsed ? "→" : "←"}
                 </button>
             </div>
 
@@ -73,6 +68,9 @@ export function Sidebar() {
                                 key={item.href}
                                 href={item.href}
                                 title={collapsed ? item.label : undefined}
+                                onClick={() => {
+                                    if (isMobile) setMobileOpen(false);
+                                }}
                                 className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${isActive
                                     ? "text-emerald-500 dark:text-emerald-400"
                                     : ""
@@ -136,7 +134,7 @@ export function Sidebar() {
                     }`}
                 style={{ background: "var(--bg-secondary)", borderRight: "1px solid var(--border)" }}
             >
-                {sidebarContent}
+                {sidebarContent(true)}
             </aside>
 
             {/* Desktop sidebar */}
@@ -144,7 +142,7 @@ export function Sidebar() {
                 className={`fixed left-0 top-0 z-40 hidden md:flex h-screen flex-col transition-all duration-300 ${collapsed ? "w-16" : "w-60"}`}
                 style={{ background: "var(--bg-secondary)", borderRight: "1px solid var(--border)" }}
             >
-                {sidebarContent}
+                {sidebarContent(false)}
             </aside>
         </>
     );

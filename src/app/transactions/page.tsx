@@ -7,7 +7,7 @@ import { EmptyState, TableSkeleton } from "@/components/ui/empty-state";
 import { Badge, Button, Select } from "@/components/ui/modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useAuth } from "@/lib/auth-context";
-import { currencyFormatter, formatCurrency } from "@/lib/format";
+import { formatCurrency } from "@/lib/format";
 import { getTransactions, deleteTransaction, type TxnFilters } from "@/lib/api/transactions";
 import { getCategories } from "@/lib/api/categories";
 import { getAccounts } from "@/lib/api/accounts";
@@ -108,8 +108,6 @@ export default function TransactionsPage() {
         URL.revokeObjectURL(url);
         toast("CSV downloaded!", "success");
     };
-
-    const fmt = currencyFormatter(ledger?.currency_code);
 
     const typeColor: Record<string, "emerald" | "red" | "blue" | "amber" | "purple"> = {
         income: "emerald", expense: "red", transfer: "blue", refund: "amber", adjustment: "purple",

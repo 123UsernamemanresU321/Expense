@@ -6,7 +6,7 @@ import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-
 
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-user-jwt",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret, x-user-jwt",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 function json(data: unknown, status = 200) {
@@ -17,21 +17,11 @@ function adminClient(): SupabaseClient {
         auth: { autoRefreshToken: false, persistSession: false },
     });
 }
-async function getUid(_admin: SupabaseClient, ah: string | null): Promise<string | null> {
-    if (!ah) {
-        console.error("[getUid] No token provided in request.");
-        return null;
-    }
+async function getUid(admin: SupabaseClient, ah: string | null): Promise<string | null> {
+    if (!ah) return null;
     const token = ah.replace(/Bearer\s+/i, "");
-    
-    try {
-        const payloadStr = atob(token.split(".")[1]);
-        const payload = JSON.parse(payloadStr);
-        return payload.sub ?? null;
-    } catch (err) {
-        console.error("[getUid] Failed to decode JWT:", err);
-        return null;
-    }
+    const { data } = await admin.auth.getUser(token);
+    return data?.user?.id ?? null;
 }
 async function requireMember(admin: SupabaseClient, ah: string | null, lid: string, roles?: string[]) {
     const uid = await getUid(admin, ah);
@@ -45,12 +35,8 @@ async function requireMember(admin: SupabaseClient, ah: string | null, lid: stri
 Deno.serve(async (req: Request) => {
     if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
     try {
-        const body = await req.json();
-        const { ledger_id, mode, lookback_days, _user_jwt } = body;
-        const authHeader = _user_jwt
-            || req.headers.get("x-user-jwt")
-            || req.headers.get("authorization");
-        console.log("[classify] Token sources — _user_jwt:", !!_user_jwt, "x-user-jwt header:", !!req.headers.get("x-user-jwt"), "authorization header:", !!req.headers.get("authorization"));
+        const { ledger_id, mode, lookback_days } = await req.json();
+        const authHeader = req.headers.get("authorization");
         if (!ledger_id || !mode) return json({ error: "ledger_id and mode ('test'|'apply') required" }, 400);
         if (mode !== "test" && mode !== "apply") return json({ error: "mode must be 'test' or 'apply'" }, 400);
 

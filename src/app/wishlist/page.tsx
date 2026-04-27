@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/layout/app-shell";
-import { Button, Badge } from "@/components/ui/modal";
+import { Button } from "@/components/ui/modal";
 import { EmptyState, TableSkeleton } from "@/components/ui/empty-state";
 import { useAuth } from "@/lib/auth-context";
 import { getWishlistItems, createWishlistItem, updateWishlistItem, toggleWishlistItemSelection, deleteWishlistItem, type WishlistItem } from "@/lib/api/wishlist";
@@ -31,7 +31,7 @@ export default function WishlistPage() {
     // Convert numbers dynamically when items or cache changes
     const mainCurrency = ledger?.currency_code ?? "USD";
 
-    const loadItems = async () => {
+    const loadItems = useCallback(async () => {
         if (!ledger) return;
         setLoading(true);
         try {
@@ -42,9 +42,9 @@ export default function WishlistPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [ledger]);
 
-    const loadCashBalance = async () => {
+    const loadCashBalance = useCallback(async () => {
         if (!ledger) return;
         try {
             const { data, error } = await supabase
@@ -64,9 +64,9 @@ export default function WishlistPage() {
         } catch {
             console.error("Failed to load cash balance");
         }
-    };
+    }, [ledger]);
 
-    const convertAll = async () => {
+    const convertAll = useCallback(async () => {
         if (!ledger) return;
         
         // 1. Convert Cash balances to main Currency
@@ -84,20 +84,18 @@ export default function WishlistPage() {
         });
         const convWishlistItems = await batchConvert(wishlistItems, mainCurrency);
         setConvertedItems(items.map((item, i) => ({ item, convertedCost: convWishlistItems[i] })));
-    };
+    }, [cashBalanceMap, items, ledger, mainCurrency]);
 
     useEffect(() => {
-        if (items.length >= 0 || cashBalanceMap.size >= 0) {
-            convertAll();
-        }
-    }, [items, cashBalanceMap, mainCurrency]);
+        convertAll();
+    }, [convertAll]);
 
     useEffect(() => {
         if (ledger) {
             loadItems();
             loadCashBalance();
         }
-    }, [ledger]);
+    }, [ledger, loadCashBalance, loadItems]);
 
     const handleAddItem = async (e: React.FormEvent) => {
         e.preventDefault();

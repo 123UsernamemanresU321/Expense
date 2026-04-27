@@ -39,9 +39,11 @@ export default function NewTransactionPage() {
         getCategories(ledger.id).then(setCategories).catch(() => { });
         getAccounts(ledger.id).then((a) => {
             setAccounts(a);
-            if (a.length > 0 && !form.account_id) {
-                setForm((f) => ({ ...f, account_id: a[0].id, currency_code: a[0].currency_code }));
-            }
+            setForm((f) => (
+                a.length > 0 && !f.account_id
+                    ? { ...f, account_id: a[0].id, currency_code: a[0].currency_code }
+                    : f
+            ));
         }).catch(() => { });
     }, [ledger]);
 

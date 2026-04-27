@@ -6,7 +6,7 @@ import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-
 
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-user-jwt",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret, x-user-jwt",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 function json(data: unknown, status = 200) {
@@ -17,25 +17,11 @@ function adminClient(): SupabaseClient {
         auth: { autoRefreshToken: false, persistSession: false },
     });
 }
-async function getUid(_admin: SupabaseClient, ah: string | null): Promise<string | null> {
-    if (!ah) {
-        console.error("[getUid] No token provided in request.");
-        return null;
-    }
+async function getUid(admin: SupabaseClient, ah: string | null): Promise<string | null> {
+    if (!ah) return null;
     const token = ah.replace(/Bearer\s+/i, "");
-    if (!token || token.split(".").length !== 3) {
-        console.error("[getUid] Token is malformed. Parts:", token.split(".").length);
-        return null;
-    }
-    try {
-        const payloadStr = atob(token.split(".")[1]);
-        const payload = JSON.parse(payloadStr);
-        console.log("[getUid] Decoded sub:", payload.sub);
-        return payload.sub ?? null;
-    } catch (err) {
-        console.error("[getUid] Failed to decode JWT:", err);
-        return null;
-    }
+    const { data } = await admin.auth.getUser(token);
+    return data?.user?.id ?? null;
 }
 async function requireMember(admin: SupabaseClient, ah: string | null, lid: string, roles?: string[]) {
     const uid = await getUid(admin, ah);
@@ -50,6 +36,7 @@ async function requireMember(admin: SupabaseClient, ah: string | null, lid: stri
 // CSV helpers — UTF-8 BOM for Excel/Numbers multi-language support
 // ---------------------------------------------------------------------------
 const BOM = "\uFEFF";
+type CsvRow = Record<string, unknown>;
 
 function csvEscape(val: string): string {
     if (val.includes(",") || val.includes('"') || val.includes("\n") || val.includes("\r")) {
@@ -58,8 +45,16 @@ function csvEscape(val: string): string {
     return val;
 }
 
-// deno-lint-ignore no-explicit-any
-function generateCSV(rows: any[], columns: string[], computed?: Record<string, (r: any) => string>): string {
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null;
+}
+
+function relatedName(row: CsvRow, key: string): string {
+    const value = row[key];
+    return isRecord(value) && typeof value.name === "string" ? value.name : "";
+}
+
+function generateCSV(rows: CsvRow[], columns: string[], computed?: Record<string, (r: CsvRow) => string>): string {
     const allCols = [...columns, ...Object.keys(computed ?? {})];
     const header = allCols.join(",");
     const lines = rows.map(row => allCols.map(col => {
@@ -84,12 +79,8 @@ function uploadJSON(admin: SupabaseClient, path: string, data: unknown) {
 Deno.serve(async (req: Request) => {
     if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
     try {
-        const body = await req.json();
-        const { ledger_id, format, filters, _user_jwt } = body;
-        const authHeader = _user_jwt
-            || req.headers.get("x-user-jwt")
-            || req.headers.get("authorization");
-        console.log("[export] Token sources — _user_jwt:", !!_user_jwt, "x-user-jwt header:", !!req.headers.get("x-user-jwt"), "authorization header:", !!req.headers.get("authorization"));
+        const { ledger_id, format, filters } = await req.json();
+        const authHeader = req.headers.get("authorization");
         if (!ledger_id) return json({ error: "ledger_id required" }, 400);
 
         const admin = adminClient();
@@ -131,10 +122,10 @@ Deno.serve(async (req: Request) => {
                     .select("transaction_id, tag:tags(name)")
                     .in("transaction_id", txnIds);
                 txnTagMap = {};
-                // deno-lint-ignore no-explicit-any
-                (txnTags ?? []).forEach((tt: any) => {
-                    if (!txnTagMap[tt.transaction_id]) txnTagMap[tt.transaction_id] = [];
-                    txnTagMap[tt.transaction_id].push(tt.tag?.name ?? "");
+                (txnTags ?? []).forEach((tt) => {
+                    const transactionId = String(tt.transaction_id);
+                    if (!txnTagMap[transactionId]) txnTagMap[transactionId] = [];
+                    txnTagMap[transactionId].push(relatedName(tt as CsvRow, "tag"));
                 });
             }
 
@@ -183,7 +174,7 @@ Deno.serve(async (req: Request) => {
             const categoriesCsv = generateCSV(categories ?? [], [
                 "name", "icon", "color", "is_income", "sort_order"
             ], {
-                parent_name: r => r.parent_id ? (catMap[r.parent_id] ?? "") : "",
+                parent_name: r => typeof r.parent_id === "string" ? (catMap[r.parent_id] ?? "") : "",
             });
             await uploadCSV(admin, `${storagePath}/categories.csv`, categoriesCsv);
             fileStats["categories.csv"] = (categories ?? []).length;
@@ -194,7 +185,7 @@ Deno.serve(async (req: Request) => {
             const merchantsCsv = generateCSV(merchants ?? [], [
                 "name", "website", "notes"
             ], {
-                default_category: r => r.default_category?.name ?? "",
+                default_category: r => relatedName(r, "default_category"),
             });
             await uploadCSV(admin, `${storagePath}/merchants.csv`, merchantsCsv);
             fileStats["merchants.csv"] = (merchants ?? []).length;
@@ -212,10 +203,10 @@ Deno.serve(async (req: Request) => {
             const txnCsv = generateCSV(transactions ?? [], [
                 "date", "txn_type", "amount", "currency_code", "description", "notes", "is_reconciled"
             ], {
-                category: r => r.category?.name ?? "",
-                merchant: r => r.merchant?.name ?? "",
-                account: r => r.account?.name ?? "",
-                tags: r => (txnTagMap[r.id] ?? []).join("; "),
+                category: r => relatedName(r, "category"),
+                merchant: r => relatedName(r, "merchant"),
+                account: r => relatedName(r, "account"),
+                tags: r => typeof r.id === "string" ? (txnTagMap[r.id] ?? []).join("; ") : "",
             });
             await uploadCSV(admin, `${storagePath}/transactions.csv`, txnCsv);
             fileStats["transactions.csv"] = (transactions ?? []).length;
@@ -226,7 +217,7 @@ Deno.serve(async (req: Request) => {
             const budgetsCsv = generateCSV(budgets ?? [], [
                 "name", "amount", "period", "start_date", "end_date", "is_active"
             ], {
-                category: r => r.category?.name ?? "",
+                category: r => relatedName(r, "category"),
             });
             await uploadCSV(admin, `${storagePath}/budgets.csv`, budgetsCsv);
             fileStats["budgets.csv"] = (budgets ?? []).length;
@@ -237,9 +228,9 @@ Deno.serve(async (req: Request) => {
             const subsCsv = generateCSV(subscriptions ?? [], [
                 "name", "amount", "currency_code", "interval", "next_due_date", "is_active", "auto_create_txn", "notes"
             ], {
-                account: r => r.account?.name ?? "",
-                category: r => r.category?.name ?? "",
-                merchant: r => r.merchant?.name ?? "",
+                account: r => relatedName(r, "account"),
+                category: r => relatedName(r, "category"),
+                merchant: r => relatedName(r, "merchant"),
             });
             await uploadCSV(admin, `${storagePath}/subscriptions.csv`, subsCsv);
             fileStats["subscriptions.csv"] = (subscriptions ?? []).length;
@@ -250,8 +241,8 @@ Deno.serve(async (req: Request) => {
             const rulesCsv = generateCSV(rules ?? [], [
                 "match_field", "match_pattern", "priority", "is_active"
             ], {
-                category: r => r.category?.name ?? "",
-                merchant: r => r.merchant?.name ?? "",
+                category: r => relatedName(r, "category"),
+                merchant: r => relatedName(r, "merchant"),
             });
             await uploadCSV(admin, `${storagePath}/classification_rules.csv`, rulesCsv);
             fileStats["classification_rules.csv"] = (rules ?? []).length;

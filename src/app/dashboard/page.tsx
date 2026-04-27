@@ -13,7 +13,7 @@ import { getMonthlySummaries, aggregateSummaries } from "@/lib/api/insights";
 import { getAccounts } from "@/lib/api/accounts";
 import { getCategories } from "@/lib/api/categories";
 import { batchConvert, getCurrencyInfo } from "@/lib/api/exchange-rates";
-import type { Transaction, MonthlySummary, Budget, Account, Category } from "@/types/database";
+import type { Transaction, Budget, Account, Category } from "@/types/database";
 
 export default function DashboardPage() {
     const { ledger } = useAuth();

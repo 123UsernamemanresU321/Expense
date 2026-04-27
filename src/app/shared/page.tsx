@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/layout/app-shell";
-import { EmptyState, TableSkeleton } from "@/components/ui/empty-state";
+import { TableSkeleton } from "@/components/ui/empty-state";
 import { Button, Badge, Modal, Input, Select } from "@/components/ui/modal";
 import { useAuth } from "@/lib/auth-context";
 import { getMembers, inviteMember, removeMember, closeMonth, reopenMonth, getMonthClosures } from "@/lib/api/shared";
@@ -20,13 +20,13 @@ export default function SharedPage() {
     const [inviteForm, setInviteForm] = useState({ user_id: "", role: "viewer" as LedgerRole });
     const [closeMonthVal, setCloseMonthVal] = useState(new Date().toISOString().slice(0, 7));
 
-    const load = async () => {
+    const load = useCallback(async () => {
         if (!ledger) return;
         setLoading(true);
         const [m, c] = await Promise.all([getMembers(ledger.id).catch(() => []), getMonthClosures(ledger.id).catch(() => [])]);
         setMembers(m); setClosures(c); setLoading(false);
-    };
-    useEffect(() => { load(); }, [ledger]);
+    }, [ledger]);
+    useEffect(() => { load(); }, [load]);
 
     const roleColor: Record<string, "emerald" | "blue" | "amber" | "zinc"> = { owner: "emerald", admin: "blue", editor: "amber", viewer: "zinc" };
 

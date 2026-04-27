@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { EmptyState, TableSkeleton } from "@/components/ui/empty-state";
 import { Button, Input, Modal, Badge } from "@/components/ui/modal";
 import { useAuth } from "@/lib/auth-context";
-import { getCategoryTree, createCategory, updateCategory, deleteCategory } from "@/lib/api/categories";
+import { getCategoryTree, createCategory, updateCategory } from "@/lib/api/categories";
 import { toast } from "@/lib/errors";
 import type { Category } from "@/types/database";
 
@@ -16,15 +16,15 @@ export default function CategoriesPage() {
     const [showCreate, setShowCreate] = useState(false);
     const [newCat, setNewCat] = useState({ name: "", is_income: false, color: "#10b981", parent_id: "" });
 
-    const load = async () => {
+    const load = useCallback(async () => {
         if (!ledger) return;
         setLoading(true);
         const t = await getCategoryTree(ledger.id).catch(() => []);
         setTree(t);
         setLoading(false);
-    };
+    }, [ledger]);
 
-    useEffect(() => { load(); }, [ledger]);
+    useEffect(() => { load(); }, [load]);
 
     const handleCreate = async () => {
         if (!ledger || !newCat.name) return;
@@ -46,8 +46,6 @@ export default function CategoriesPage() {
         toast(cat.is_active ? "Category deactivated" : "Category reactivated", "info");
         load();
     };
-
-    const flatCats = tree.flatMap((c) => [c, ...(c.children ?? [])]);
 
     return (
         <AppShell>

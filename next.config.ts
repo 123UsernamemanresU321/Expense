@@ -6,6 +6,9 @@ const nextConfig: NextConfig = {
   output: "export",
   basePath: basePath || undefined,
   assetPrefix: basePath || undefined,
+  turbopack: {
+    root: process.cwd(),
+  },
   images: {
     unoptimized: true,
   },
