@@ -52,6 +52,7 @@ export async function reconcileAccount(input: {
         difference: number;
         is_reconciled: boolean;
         transactions_checked: number;
+        account_currency: string;
     }>("reconcile-snapshot-helper", input);
 }
 

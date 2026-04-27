@@ -84,7 +84,9 @@ export default function AccountsPage() {
         try {
             const r = await reconcileAccount({ ledger_id: ledger.id, account_id: showReconcile.id, snapshot_date: new Date().toISOString().slice(0, 10), statement_balance: parseFloat(reconBalance) });
             if (r.error) { toast(r.error, "error"); return; }
-            toast(r.data?.is_reconciled ? "Account reconciled! ✅" : `Difference: $${r.data?.difference}`, r.data?.is_reconciled ? "success" : "info");
+            const diff = Math.abs(r.data?.difference ?? 0);
+            const diffFmt = currencyFormatter(r.data?.account_currency ?? showReconcile.currency_code)(diff);
+            toast(r.data?.is_reconciled ? "Account reconciled!" : `Difference: ${diffFmt}`, r.data?.is_reconciled ? "success" : "info");
             setShowReconcile(null);
             setReconBalance("");
             load();
