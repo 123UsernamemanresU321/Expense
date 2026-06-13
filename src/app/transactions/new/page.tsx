@@ -49,6 +49,7 @@ export default function NewTransactionPage() {
 
     // Get selected account's currency
     const selectedAccount = useMemo(() => accounts.find((a) => a.id === form.account_id), [accounts, form.account_id]);
+    const destinationAccount = useMemo(() => accounts.find((a) => a.id === form.to_account_id), [accounts, form.to_account_id]);
     const accountCurrency = selectedAccount?.currency_code ?? ledger?.currency_code ?? "USD";
 
     // Auto-set currency when account changes
@@ -60,17 +61,39 @@ export default function NewTransactionPage() {
 
     // Live conversion preview
     useEffect(() => {
-        if (!form.amount || !form.currency_code || form.currency_code === accountCurrency) {
+        if (!form.amount) {
             setConvertedPreview(null);
             return;
         }
         const amt = parseFloat(form.amount);
         if (isNaN(amt) || amt <= 0) { setConvertedPreview(null); return; }
 
+        let cancelled = false;
+
+        if (form.txn_type === "transfer") {
+            const fromCurrency = selectedAccount?.currency_code;
+            const toCurrency = destinationAccount?.currency_code;
+            if (!fromCurrency || !toCurrency || fromCurrency === toCurrency) {
+                setConvertedPreview(null);
+                return;
+            }
+
+            convert(amt, fromCurrency, toCurrency).then((converted) => {
+                if (!cancelled) setConvertedPreview(`≈ ${formatCurrency(converted, toCurrency)} in destination account`);
+            });
+            return () => { cancelled = true; };
+        }
+
+        if (!form.currency_code || form.currency_code === accountCurrency) {
+            setConvertedPreview(null);
+            return;
+        }
+
         convert(amt, form.currency_code, accountCurrency).then((converted) => {
-            setConvertedPreview(`≈ ${formatCurrency(converted, accountCurrency)}`);
+            if (!cancelled) setConvertedPreview(`≈ ${formatCurrency(converted, accountCurrency)}`);
         });
-    }, [form.amount, form.currency_code, accountCurrency]);
+        return () => { cancelled = true; };
+    }, [form.amount, form.currency_code, accountCurrency, form.txn_type, selectedAccount, destinationAccount]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -83,18 +106,36 @@ export default function NewTransactionPage() {
             toast("Cannot transfer to the same account", "error");
             return;
         }
+        if (form.txn_type === "transfer" && (!selectedAccount || !destinationAccount)) {
+            toast("Please select valid transfer accounts", "error");
+            return;
+        }
 
         setLoading(true);
 
         try {
+            const amount = parseFloat(form.amount);
+            if (!Number.isFinite(amount) || amount < 0) {
+                toast("Please enter a valid amount", "error");
+                return;
+            }
+
             if (form.txn_type === "transfer") {
+                const fromCurrency = selectedAccount!.currency_code;
+                const toCurrency = destinationAccount!.currency_code;
+                const toAmount = await convert(amount, fromCurrency, toCurrency);
+
                 await createTransfer({
                     ledger_id: ledger.id,
                     from_account_id: form.account_id,
                     to_account_id: form.to_account_id,
-                    amount: parseFloat(form.amount),
+                    amount,
+                    to_amount: toAmount,
                     date: form.date,
                     description: form.description || undefined,
+                    notes: form.notes || undefined,
+                    from_currency_code: fromCurrency,
+                    to_currency_code: toCurrency,
                 });
                 toast("Transfer complete!", "success");
             } else {

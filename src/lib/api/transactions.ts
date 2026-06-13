@@ -147,39 +147,56 @@ export async function createTransfer(input: {
     from_account_id: string;
     to_account_id: string;
     amount: number;
+    to_amount?: number;
     date: string;
     description?: string;
+    notes?: string;
+    from_currency_code: string;
+    to_currency_code: string;
 }): Promise<{ from: Transaction; to: Transaction }> {
     const { data: { user } } = await supabase.auth.getUser();
     const fromId = crypto.randomUUID();
     const toId = crypto.randomUUID();
+    const notes = [input.description, input.notes].filter(Boolean).join("\n\n") || undefined;
 
-    const [from, to] = await Promise.all([
-        supabase.from("transactions").insert({
-            id: fromId,
-            ledger_id: input.ledger_id,
-            account_id: input.from_account_id,
-            txn_type: "transfer" as TxnType,
-            amount: input.amount,
-            date: input.date,
-            description: "Transfer out",
-            notes: input.description || undefined,
-            transfer_peer_id: toId,
-            created_by: user!.id,
-        }).select().single(),
-        supabase.from("transactions").insert({
-            id: toId,
-            ledger_id: input.ledger_id,
-            account_id: input.to_account_id,
-            txn_type: "transfer" as TxnType,
-            amount: input.amount,
-            date: input.date,
-            description: "Transfer in",
-            notes: input.description || undefined,
-            transfer_peer_id: fromId,
-            created_by: user!.id,
-        }).select().single(),
-    ]);
+    unwrap(
+        await supabase.from("transactions").insert([
+            {
+                id: fromId,
+                ledger_id: input.ledger_id,
+                account_id: input.from_account_id,
+                txn_type: "transfer" as TxnType,
+                amount: input.amount,
+                currency_code: input.from_currency_code,
+                date: input.date,
+                description: "Transfer out",
+                notes,
+                created_by: user!.id,
+            },
+            {
+                id: toId,
+                ledger_id: input.ledger_id,
+                account_id: input.to_account_id,
+                txn_type: "transfer" as TxnType,
+                amount: input.to_amount ?? input.amount,
+                currency_code: input.to_currency_code,
+                date: input.date,
+                description: "Transfer in",
+                notes,
+                created_by: user!.id,
+            },
+        ])
+    );
 
-    return { from: unwrap(from), to: unwrap(to) };
+    try {
+        const [from, to] = await Promise.all([
+            supabase.from("transactions").update({ transfer_peer_id: toId }).eq("id", fromId).select().single(),
+            supabase.from("transactions").update({ transfer_peer_id: fromId }).eq("id", toId).select().single(),
+        ]);
+
+        return { from: unwrap(from), to: unwrap(to) };
+    } catch (err) {
+        await supabase.from("transactions").delete().in("id", [fromId, toId]);
+        throw err;
+    }
 }
