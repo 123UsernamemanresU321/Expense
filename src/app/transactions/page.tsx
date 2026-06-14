@@ -16,9 +16,11 @@ import { toast, safe } from "@/lib/errors";
 import type { Transaction, Category, Account, TxnType } from "@/types/database";
 
 const PAGE_SIZE = 25;
+const HIDDEN_TXN_STORAGE_VERSION = "v1";
 
 export default function TransactionsPage() {
     const { ledger, canWrite } = useAuth();
+    const ledgerId = ledger?.id ?? null;
     const [loading, setLoading] = useState(true);
     const [txns, setTxns] = useState<Transaction[]>([]);
     const [page, setPage] = useState(0);
@@ -27,6 +29,12 @@ export default function TransactionsPage() {
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+    const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+    const [bulkDeleting, setBulkDeleting] = useState(false);
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+    const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => new Set());
+    const [hiddenLoadedForLedger, setHiddenLoadedForLedger] = useState<string | null>(null);
+    const [showHidden, setShowHidden] = useState(false);
 
     // Filters
     const [search, setSearch] = useState("");
@@ -49,6 +57,32 @@ export default function TransactionsPage() {
         getCategories(ledger.id).then(setCategories).catch(() => { });
         getAccounts(ledger.id).then(setAccounts).catch(() => { });
     }, [ledger]);
+
+    useEffect(() => {
+        if (!ledgerId) {
+            setHiddenIds(new Set());
+            setHiddenLoadedForLedger(null);
+            return;
+        }
+
+        try {
+            const raw = localStorage.getItem(`ledgerly:hidden-transactions:${HIDDEN_TXN_STORAGE_VERSION}:${ledgerId}`);
+            const ids = raw ? JSON.parse(raw) : [];
+            setHiddenIds(new Set(Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : []));
+        } catch {
+            setHiddenIds(new Set());
+        }
+        setHiddenLoadedForLedger(ledgerId);
+        setSelectedIds(new Set());
+        setShowHidden(false);
+    }, [ledgerId]);
+
+    useEffect(() => {
+        if (!ledgerId || hiddenLoadedForLedger !== ledgerId) return;
+        try {
+            localStorage.setItem(`ledgerly:hidden-transactions:${HIDDEN_TXN_STORAGE_VERSION}:${ledgerId}`, JSON.stringify([...hiddenIds]));
+        } catch { }
+    }, [ledgerId, hiddenIds, hiddenLoadedForLedger]);
 
     const fetchTxns = useCallback(async () => {
         if (!ledger) return;
@@ -76,21 +110,137 @@ export default function TransactionsPage() {
     // Reset page when filters change
     useEffect(() => { setPage(0); }, [debouncedSearch, typeFilter, catFilter, acctFilter, dateFrom, dateTo]);
 
+    const visibleTxns = useMemo(
+        () => txns.filter((txn) => showHidden ? hiddenIds.has(txn.id) : !hiddenIds.has(txn.id)),
+        [txns, hiddenIds, showHidden]
+    );
+
+    const visibleTxnIds = useMemo(() => visibleTxns.map((txn) => txn.id), [visibleTxns]);
+    const selectedTxns = useMemo(() => txns.filter((txn) => selectedIds.has(txn.id)), [txns, selectedIds]);
+    const selectedCount = selectedIds.size;
+    const hiddenCount = hiddenIds.size;
+    const allVisibleSelected = visibleTxnIds.length > 0 && visibleTxnIds.every((id) => selectedIds.has(id));
+
+    useEffect(() => {
+        const visibleIds = new Set(visibleTxnIds);
+        setSelectedIds((prev) => {
+            const next = new Set([...prev].filter((id) => visibleIds.has(id)));
+            return next.size === prev.size ? prev : next;
+        });
+    }, [visibleTxnIds]);
+
+    const toggleSelected = (id: string) => {
+        setSelectedIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
+
+    const toggleSelectAllVisible = () => {
+        setSelectedIds((prev) => {
+            const next = new Set(prev);
+            if (allVisibleSelected) visibleTxnIds.forEach((id) => next.delete(id));
+            else visibleTxnIds.forEach((id) => next.add(id));
+            return next;
+        });
+    };
+
+    const clearSelection = () => setSelectedIds(new Set());
+
+    const hideSelected = useCallback(() => {
+        if (selectedIds.size === 0) return;
+        const count = selectedIds.size;
+        setHiddenIds((prev) => new Set([...prev, ...selectedIds]));
+        setSelectedIds(new Set());
+        toast(`${count} transaction${count === 1 ? "" : "s"} hidden`, "info");
+    }, [selectedIds]);
+
+    const unhideSelected = useCallback(() => {
+        if (selectedIds.size === 0) return;
+        const count = selectedIds.size;
+        setHiddenIds((prev) => {
+            const next = new Set(prev);
+            selectedIds.forEach((id) => next.delete(id));
+            return next;
+        });
+        setSelectedIds(new Set());
+        toast(`${count} transaction${count === 1 ? "" : "s"} restored`, "success");
+    }, [selectedIds]);
+
+    useEffect(() => {
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (!event.ctrlKey || event.metaKey || event.altKey || event.key.toLowerCase() !== "h") return;
+
+            const target = event.target as HTMLElement | null;
+            if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
+
+            event.preventDefault();
+            if (selectedIds.size > 0) {
+                if (showHidden) unhideSelected();
+                else hideSelected();
+                return;
+            }
+
+            setShowHidden((current) => !current);
+            setSelectedIds(new Set());
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [hideSelected, selectedIds.size, showHidden, unhideSelected]);
+
     const handleDelete = async (id: string) => {
         setDeletingId(id);
         const res = await safe(() => deleteTransaction(id), "Failed to delete transaction");
         if (res !== null) {
             toast("Transaction deleted", "success");
+            setHiddenIds((prev) => {
+                const next = new Set(prev);
+                next.delete(id);
+                return next;
+            });
+            setSelectedIds((prev) => {
+                const next = new Set(prev);
+                next.delete(id);
+                return next;
+            });
             fetchTxns();
         }
         setDeletingId(null);
     };
 
+    const handleBulkDelete = async () => {
+        const ids = [...selectedIds];
+        if (ids.length === 0) return;
+
+        setBulkDeleting(true);
+        const results = await Promise.allSettled(ids.map((id) => deleteTransaction(id)));
+        const deletedIds = ids.filter((_, index) => results[index].status === "fulfilled");
+        const failedCount = results.length - deletedIds.length;
+
+        if (deletedIds.length > 0) {
+            setHiddenIds((prev) => {
+                const next = new Set(prev);
+                deletedIds.forEach((id) => next.delete(id));
+                return next;
+            });
+            setSelectedIds(new Set());
+            toast(`${deletedIds.length} transaction${deletedIds.length === 1 ? "" : "s"} deleted`, "success");
+            fetchTxns();
+        }
+        if (failedCount > 0) toast(`${failedCount} transaction${failedCount === 1 ? "" : "s"} could not be deleted`, "error");
+
+        setBulkDeleting(false);
+        setConfirmBulkDelete(false);
+    };
+
     // CSV Export
-    const exportCSV = () => {
-        if (txns.length === 0) { toast("No transactions to export", "info"); return; }
+    const exportCSV = (rows: Transaction[] = visibleTxns) => {
+        if (rows.length === 0) { toast("No transactions to export", "info"); return; }
         const headers = ["Date", "Description", "Category", "Account", "Type", "Amount"];
-        const rows = txns.map((t) => [
+        const csvRows = rows.map((t) => [
             t.date,
             `"${(t.description ?? "").replace(/"/g, '""')}"`,
             t.category?.name ?? "",
@@ -98,7 +248,7 @@ export default function TransactionsPage() {
             t.txn_type,
             String(t.amount),
         ]);
-        const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+        const csv = [headers.join(","), ...csvRows.map((r) => r.join(","))].join("\n");
         const blob = new Blob([csv], { type: "text/csv" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
@@ -131,7 +281,7 @@ export default function TransactionsPage() {
                     <p className="text-sm text-zinc-400">View and manage all transactions</p>
                 </div>
                 <div className="flex gap-2">
-                    <Button variant="secondary" size="sm" onClick={exportCSV}>
+                    <Button variant="secondary" size="sm" onClick={() => exportCSV()}>
                         ⬇ Export CSV
                     </Button>
                     {canWrite && (
@@ -181,6 +331,34 @@ export default function TransactionsPage() {
                 )}
             </div>
 
+            {(selectedCount > 0 || showHidden) && (
+                <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/70 px-3 py-2">
+                    {showHidden && <Badge color="amber">Hidden rows</Badge>}
+                    {selectedCount > 0 && <span className="text-xs font-medium text-zinc-300">{selectedCount} selected</span>}
+                    {selectedCount > 0 && (
+                        <>
+                            <Button variant="secondary" size="sm" onClick={() => exportCSV(selectedTxns)}>
+                                Export selected
+                            </Button>
+                            <Button variant="secondary" size="sm" onClick={showHidden ? unhideSelected : hideSelected}>
+                                {showHidden ? "Unhide selected" : "Hide selected"}
+                            </Button>
+                            {canWrite && (
+                                <Button variant="danger" size="sm" onClick={() => setConfirmBulkDelete(true)} disabled={bulkDeleting}>
+                                    Delete selected
+                                </Button>
+                            )}
+                            <Button variant="ghost" size="sm" onClick={clearSelection}>
+                                Clear selection
+                            </Button>
+                        </>
+                    )}
+                    {showHidden && selectedCount === 0 && (
+                        <span className="text-xs text-zinc-500">{hiddenCount} hidden transaction{hiddenCount === 1 ? "" : "s"}</span>
+                    )}
+                </div>
+            )}
+
             {/* Table */}
             {loading ? (
                 <TableSkeleton rows={8} />
@@ -191,11 +369,26 @@ export default function TransactionsPage() {
                     description="Create your first transaction to get started."
                     action={canWrite ? <Link href="/transactions/new" className="text-sm text-emerald-400 hover:text-emerald-300">+ Add transaction</Link> : undefined}
                 />
+            ) : visibleTxns.length === 0 ? (
+                <EmptyState
+                    icon={showHidden ? "◌" : "💳"}
+                    title={showHidden ? "No hidden transactions" : "No visible transactions"}
+                    description={showHidden ? "Hidden transactions matching this page and filter will appear here." : "All transactions on this page are hidden from the visible list."}
+                />
             ) : (
                 <div className="overflow-x-auto rounded-2xl border border-zinc-800">
                     <table className="w-full text-sm">
                         <thead>
                             <tr className="border-b border-zinc-800 bg-zinc-900/80 text-left text-xs text-zinc-400">
+                                <th className="w-10 px-4 py-3">
+                                    <input
+                                        type="checkbox"
+                                        checked={allVisibleSelected}
+                                        onChange={toggleSelectAllVisible}
+                                        aria-label="Select all visible transactions"
+                                        className="h-4 w-4 rounded border-zinc-600 bg-zinc-800 text-emerald-500"
+                                    />
+                                </th>
                                 <th className="px-4 py-3 font-medium">Date</th>
                                 <th className="px-4 py-3 font-medium">Description</th>
                                 <th className="px-4 py-3 font-medium hidden md:table-cell">Category</th>
@@ -206,8 +399,17 @@ export default function TransactionsPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-800/50">
-                            {txns.map((txn) => (
-                                <tr key={txn.id} className="hover:bg-zinc-800/30 transition-colors">
+                            {visibleTxns.map((txn) => (
+                                <tr key={txn.id} className={`${selectedIds.has(txn.id) ? "bg-emerald-500/5" : ""} hover:bg-zinc-800/30 transition-colors`}>
+                                    <td className="px-4 py-3">
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedIds.has(txn.id)}
+                                            onChange={() => toggleSelected(txn.id)}
+                                            aria-label={`Select transaction ${txn.description || txn.date}`}
+                                            className="h-4 w-4 rounded border-zinc-600 bg-zinc-800 text-emerald-500"
+                                        />
+                                    </td>
                                     <td className="px-4 py-3 text-zinc-300 whitespace-nowrap">{txn.date}</td>
                                     <td className="px-4 py-3 font-medium text-white">{txn.description || "—"}</td>
                                     <td className="px-4 py-3 text-zinc-400 hidden md:table-cell">{txn.category?.name ?? "—"}</td>
@@ -266,6 +468,15 @@ export default function TransactionsPage() {
                 title="Delete Transaction"
                 message="Are you sure you want to permanently delete this transaction? This cannot be undone."
                 confirmLabel="Delete"
+                variant="danger"
+            />
+            <ConfirmDialog
+                open={confirmBulkDelete}
+                onClose={() => setConfirmBulkDelete(false)}
+                onConfirm={handleBulkDelete}
+                title="Delete Selected Transactions"
+                message={`Permanently delete ${selectedCount} selected transaction${selectedCount === 1 ? "" : "s"}? This cannot be undone.`}
+                confirmLabel={bulkDeleting ? "Deleting..." : "Delete"}
                 variant="danger"
             />
         </AppShell>
