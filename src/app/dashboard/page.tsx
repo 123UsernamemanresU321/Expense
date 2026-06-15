@@ -13,6 +13,7 @@ import { getMonthlySummaries, aggregateSummaries } from "@/lib/api/insights";
 import { getAccounts } from "@/lib/api/accounts";
 import { getCategories } from "@/lib/api/categories";
 import { batchConvert, getCurrencyInfo } from "@/lib/api/exchange-rates";
+import { isTransactionPositive, transactionAmountSign } from "@/lib/transaction-display";
 import type { Transaction, Budget, Account, Category } from "@/types/database";
 
 export default function DashboardPage() {
@@ -189,8 +190,8 @@ export default function DashboardPage() {
                                         <p className="text-xs text-zinc-400">{txn.date} · {txn.category?.name ?? "Uncategorized"}</p>
                                     </div>
                                     <div className="text-right">
-                                        <span className={`text-sm font-semibold ${txn.txn_type === "income" || txn.txn_type === "refund" ? "text-emerald-400" : "text-red-400"}`}>
-                                            {txn.txn_type === "income" || txn.txn_type === "refund" ? "+" : "-"}{fmt(converted)}
+                                        <span className={`text-sm font-semibold ${isTransactionPositive(txn) ? "text-emerald-400" : "text-red-400"}`}>
+                                            {transactionAmountSign(txn)}{fmt(converted)}
                                         </span>
                                         {txn.currency_code && txn.currency_code !== mainCurrency && (
                                             <p className="text-[10px] text-zinc-500">{getCurrencyInfo(txn.currency_code).flag} {formatCurrency(Number(txn.amount), txn.currency_code)}</p>
